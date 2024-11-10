@@ -3,10 +3,13 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Int32  # Cambiamos de Float32 a Int32
 from std_msgs.msg import Int32MultiArray
+from std_srvs.srv import Trigger
 
 class MotorNode(Node):
     def __init__(self):
         super().__init__('motor_node')
+
+        self.client = self.create_client(Trigger, 'analize_frame')
 
         # Crear suscripciones
         self.create_subscription(
@@ -27,6 +30,13 @@ class MotorNode(Node):
             Int32MultiArray,
             '/ultrasonic_sensor',  # Cambiado para que coincida con micro-ROS
             self.ultrasonic_callback,
+            10
+        )
+
+        self.create_subscription(
+            Int32MultiArray,
+            '/PID_debugger',  # Cambiado para que coincida con micro-ROS
+            self.PID_callback,
             10
         )
 
@@ -102,6 +112,13 @@ class MotorNode(Node):
         distances = msg.data
         self.get_logger().info("-------------------------------")
         self.get_logger().info(f'Sensor 1: {distances[0]} cm, Sensor 2: {distances[1]} cm, Sensor 3: {distances[2]} cm')
+        self.get_logger().info("-------------------------------")
+
+    def PID_callback(self,msg):
+        datos = msg.data
+        self.get_logger().info(f'speed izquierda: {datos[0]},speed derecha: {datos[1]}')
+        self.get_logger().info(f'Error: {datos[2]} °/s')
+        self.get_logger().info(f'Conteo encoder izquierdo: {datos[3]} pulsos, Conteo encoder derecho: {datos[4]} pulsos')
         self.get_logger().info("-------------------------------")
 
     # Método para publicar la velocidad deseada
