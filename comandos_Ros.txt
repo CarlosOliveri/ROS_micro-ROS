@@ -1,0 +1,24 @@
+Cuando editas el archivo de python si o si hay que correr estos comandos
+cd ~/ros2_ws
+colcon build
+source install/setup.bash
+
+Para correr el nodo que se comunica con el micro
+ros2 run robot_controller motor_node
+
+Para crear un paquete de ros2
+ros2 pkg create --build-type ament_python motor_controller --dependencies rclpy std_msgs
+para setear la velocidad 
+ros2 topic pub /motor_speed std_msgs/msg/Int32 "{data: 130}"
+
+Conectar el USB
+ros2 run micro_ros_agent micro_ros_agent serial --dev /dev/ttyUSB0
+Conectar por UDP
+ros2 run micro_ros_agent micro_ros_agent udp4 --port 8888
+
+ros2 topic pub /set_motor_speed_1 std_msgs/msg/Int32 "{data: 0}"
+ros2 topic pub /set_motor_speed_2 std_msgs/msg/Int32 "{data: 0}"
+ros2 topic pub /set_motor_speed_1 std_msgs/msg/Int32 "{data: 50}"
+ros2 topic pub /set_motor_speed_2 std_msgs/msg/Int32 "{data: 50}"
+
+ros2 topic pub /set_sample_time std_msgs/msg/Int32 "{data: 5000}"
