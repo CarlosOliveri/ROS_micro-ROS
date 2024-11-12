@@ -287,8 +287,8 @@ void leer_sensores(float *distancias) {
 
 void setup() {
   Serial.begin(115200);
-  //set_microros_wifi_transports("Flia Martinez", "nomeacuerdo@", "192.168.100.175", 8888);
-  set_microros_wifi_transports("FIUNA", "fiuna#2024", "172.16.245.144", 8888);
+  set_microros_wifi_transports("Flia Martinez", "nomeacuerdo@", "192.168.100.175", 8888);
+  //set_microros_wifi_transports("FIUNA", "fiuna#2024", "172.16.245.144", 8888);
 
   //Configuracion de direccion de motores
   pinMode(MOTOR_DIR_PIN_1, OUTPUT);
@@ -429,7 +429,6 @@ void loop() {
     speed_2_msg.data = (int32_t)current_speed_2;
     RCSOFTCHECK(rcl_publish(&speed_1_publisher, &speed_1_msg, NULL));
     RCSOFTCHECK(rcl_publish(&speed_2_publisher, &speed_2_msg, NULL));
-     Reiniciar contador de ticks
     last_1_ticks = encoder_1_ticks;
     last_2_ticks = encoder_2_ticks;
     last_time = current_time;

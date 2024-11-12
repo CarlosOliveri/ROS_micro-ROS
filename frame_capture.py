@@ -15,7 +15,7 @@ from std_srvs.srv import Trigger  # Servicio de ejemplo que no requiere parámet
 #CONSTANTES DE INTERES
 proporcion_x = 0.7535 
 proporcion_y = 0.4557
-altura_camara = 1.5 #metros este parametro hay que verificar al momento de implementar
+altura_camara = 3 #metros este parametro hay que verificar al momento de implementar
 W_m = 2 * altura_camara * proporcion_x #metros
 H_m = 2 * altura_camara * proporcion_y #metros
 lado_robot = 0.26 #metros
@@ -48,12 +48,13 @@ CH = "1"#input("Ingrese el numero del canal: ")
 #URL = "rtsp://admin:"+PASS+"@"+IP+":554/cam/realmonitor?channel="+CH+"&subtype=0"
 URL = "rtsp://admin:"+PASS+"@"+IP+":554/Streaming/Channels/"+CH+"01"
 URL_Cam_IP = "rtsp://"+IP+":554/Streaming/Channels/"+CH+"01"
-
+img_pueba = "./obstaculos.png"
 class FrameAnalysisService(Node):
     def __init__(self):
         super().__init__('frame_analysis_service')
         self.srv = self.create_service(Trigger, 'analyze_frame', self.analize_frame_callback)
-        self.capture = cv2.VideoCapture(0)
+        #self.capture = cv2.VideoCapture(0)
+        self.capture = cv2.imread("img_prueba",cv2.IMREAD_COLOR)
 
         self.get_logger().info('Frame Analysis Service is ready')
 
