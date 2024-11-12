@@ -25,10 +25,10 @@ detection = cv2.createBackgroundSubtractorMOG2(history=10000,varThreshold=12)
 #limites de la meta
 redBajo1 = np.array([0, 200, 50], np.uint8)
 redAlto1 = np.array([10, 255, 255], np.uint8)
-redBajo2=np.array([179, 230, 100], np.uint8)
+redBajo2=np.array([160, 150, 20], np.uint8)
 redAlto2=np.array([180, 255, 255], np.uint8)
 #Limite del robot
-blueBajo = np.array([100,250,50],np.uint8)
+blueBajo = np.array([100,100,50],np.uint8)
 blueAlto = np.array([140,255,100],np.uint8)
 #Limite de los obstaculos
 obstBajo = np.array([0,0,0],np.uint8)
@@ -41,7 +41,7 @@ CH = "1"#input("Ingrese el numero del canal: ")
 #URL = "rtsp://admin:"+PASS+"@"+IP+":554/cam/realmonitor?channel="+CH+"&subtype=0"
 URL = "rtsp://admin:"+PASS+"@"+IP+":554/Streaming/Channels/"+CH+"01"
 URL_Cam_IP = "rtsp://"+IP+":554/Streaming/Channels/"+CH+"01"
-Capture = cv2.VideoCapture(URL)
+Capture = cv2.VideoCapture(0)
 
 def distancia_entre_coord(a,b):
   distancia = math.sqrt((a[0]-b.clave[0])**2 + (a[1]-b.clave[1])**2)
@@ -140,6 +140,16 @@ while True:
             print("no se encontro frame")
         #print(frame.shape)
 
+        # Factor de escala
+        scale_factor = 0.9  # Redimensiona al 50% del tamaño original
+
+        # Obtener el nuevo tamaño
+        new_width = int(frame.shape[1] * scale_factor)
+        new_height = int(frame.shape[0] * scale_factor)
+
+        # Redimensionar la imagen
+        frame = cv2.resize(frame, (new_width, new_height))
+
         frame_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         #Resalta los objetos de los colores deseados
         maskRed1 = cv2.inRange(frame_hsv,redBajo1,redAlto1)
@@ -176,13 +186,13 @@ while True:
 
         #Las siguientes lineas sirven para graficar el mapa
         #img_2 = 255*np.ones((570,1350,3),dtype=np.uint8)
-        """ for j in range(len(elementos_obstaculos)):
+        for j in range(len(elementos_obstaculos)):
             #Obstaculost
             cv2.line(frame,(elementos_obstaculos[j][0],elementos_obstaculos[j][1]),(elementos_obstaculos[j][0]+elementos_obstaculos[j][2],elementos_obstaculos[j][1]),(30, 100, 0), 4)
             cv2.line(frame,(elementos_obstaculos[j][0],elementos_obstaculos[j][1]),(elementos_obstaculos[j][0],elementos_obstaculos[j][1]+elementos_obstaculos[j][3]),(30, 100, 0), 4)
             cv2.line(frame,(elementos_obstaculos[j][0],elementos_obstaculos[j][1]+elementos_obstaculos[j][3]),(elementos_obstaculos[j][0]+elementos_obstaculos[j][2],elementos_obstaculos[j][1]+elementos_obstaculos[j][3]),(30, 100, 0), 4)
             cv2.line(frame,(elementos_obstaculos[j][0]+elementos_obstaculos[j][2],elementos_obstaculos[j][1]+elementos_obstaculos[j][3]),(elementos_obstaculos[j][0]+elementos_obstaculos[j][2],elementos_obstaculos[j][1]),(30, 100, 0), 4)
-         """
+         
         #Meta
         cv2.line(frame,(meta_coord[0],meta_coord[1]),(meta_coord[0]+meta_coord[2],meta_coord[1]),(0, 0, 255), 4)
         cv2.line(frame,(meta_coord[0],meta_coord[1]),(meta_coord[0],meta_coord[1]+meta_coord[3]),(0, 0, 255), 4)

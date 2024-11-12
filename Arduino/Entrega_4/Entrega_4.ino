@@ -64,6 +64,7 @@ float distancias[3];
 rcl_subscription_t speed_1_subscriber;          //escucha la velocidad deseada para el motor 1
 rcl_subscription_t speed_2_subscriber;          //escucha la velocidad deseada para el motor 2
 rcl_subscription_t sample_time_subscriber;      //escucha el tiempo de muestreo de los sensores ultrasonicos
+rcl_subscription_t angulo_deseado_subscriber;
 rcl_publisher_t speed_1_publisher;              //Publica la velocidad calculada del encoder 1
 rcl_publisher_t speed_2_publisher;              //Publica la velocidad calculada del encoder 2
 rcl_publisher_t ultrasonic_publisher;           //Publicas lecturas de los ultrasonicos en un array
@@ -71,6 +72,7 @@ rcl_publisher_t pid_debugger_publisher;                   //Publica lectura del 
 std_msgs__msg__Int32 speed_1_msg;               //variable de velocidad de motor 1
 std_msgs__msg__Int32 speed_2_msg;               //variable de velocidad de motor 2
 std_msgs__msg__Int32 sample_time_msg;           //variable de tiempo de muestreo de sensores
+std_msgs__msg__Int32 angulo_deseado_msg;
 std_msgs__msg__Int32MultiArray ultrasonic_msg;  //variable de lecturas de los sensores
 std_msgs__msg__Int32MultiArray pid_msg;
 rclc_executor_t executor;
@@ -85,6 +87,7 @@ float current_speed_1 = 0;  // Velocidad calculada del motor 1
 float desired_speed_1 = 0;
 float current_speed_2 = 0;  // Velocidad calculada del motor 2
 float desired_speed_2 = 0;
+float angulo_deseado_pid = 0;
 
 //Variables de PID
 float error_anterior = 0;//en angulos
@@ -158,8 +161,8 @@ float calcular_angulo(float dist_1,float dist_2 ){
   //Serial.println(encoder_2_ticks);
 }
 
-void Control_PID(float actual_theta){
-  float error = actual_theta;
+void Control_PID(float actual_theta,float theta_deseado){
+  float error = - theta_deseado + actual_theta;
 
   float P = kp * error;
   float I = I + ki * error;
@@ -260,6 +263,13 @@ void subscription_sample_time_callback(const void *msgin) {
   
 }
 
+void subscription_angulo_deseado_callback(const void *msgin){
+  const std_msgs__msg__Int32 *msg = (const std_msgs__msg__Int32 *)msgin;
+  angulo_deseado_pid = (msg->data)*3.14/180;
+  Serial.print("Se Cambio el angulo deseado del PID: ");
+  Serial.println(angulo_deseado_pid);
+}
+
 float leer_distancia(int TRIG_PIN, int ECHO_PIN) {
   //Lectura de sensores ultrasonicos
   long duration;
@@ -354,6 +364,13 @@ void setup() {
     ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
     "sample_time"));
 
+  // Crear suscriptor para la velocidad deseada
+  RCCHECK(rclc_subscription_init_default(
+    &angulo_deseado_subscriber,
+    &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
+    "angulo_deseado"));
+
   // Crear publicador para la velocidad actual del motor 1
   RCCHECK(rclc_publisher_init_default(
     &speed_1_publisher,
@@ -385,7 +402,8 @@ void setup() {
   RCCHECK(rclc_executor_add_subscription(&executor, &speed_1_subscriber, &speed_1_msg, &subscription_speed_1_callback, ON_NEW_DATA));
   RCCHECK(rclc_executor_add_subscription(&executor, &speed_2_subscriber, &speed_2_msg, &subscription_speed_2_callback, ON_NEW_DATA));
   RCCHECK(rclc_executor_add_subscription(&executor, &sample_time_subscriber, &sample_time_msg, &subscription_sample_time_callback, ON_NEW_DATA));
-
+  RCCHECK(rclc_executor_add_subscription(&executor, &angulo_deseado_subscriber,&angulo_deseado_msg,&subscription_angulo_deseado_callback,ON_NEW_DATA));
+  
   speed_1_msg.data = 0;
   speed_2_msg.data = 0;
   sample_time_msg.data = 0;
@@ -418,7 +436,7 @@ void loop() {
     RCSOFTCHECK(rcl_publish(&ultrasonic_publisher, &ultrasonic_msg, NULL));
   }
   // Publicar la velocidad actual del motor (basada en el encoder)
-  unsigned long current_time = millis();
+  /*unsigned long current_time = millis();
   unsigned long elapsed_time = current_time - last_time;
   if (elapsed_time >= 1000) {
     // Calcular velocidad en rad/min (ejemplo simple)
@@ -429,11 +447,11 @@ void loop() {
     speed_2_msg.data = (int32_t)current_speed_2;
     RCSOFTCHECK(rcl_publish(&speed_1_publisher, &speed_1_msg, NULL));
     RCSOFTCHECK(rcl_publish(&speed_2_publisher, &speed_2_msg, NULL));
-     Reiniciar contador de ticks
+     //Reiniciar contador de ticks
     last_1_ticks = encoder_1_ticks;
     last_2_ticks = encoder_2_ticks;
     last_time = current_time;
-  }
+  }*/
   //////////////////////////////////////////////
   //Serial.print("Enviando paquetes ...");
   if (millis() - last_time_pid >= sample_time){
@@ -442,11 +460,11 @@ void loop() {
     gps_speed_1 = ((encoder_1_ticks - last_1_ticks) * 1000 * 360) / (50 * 506);
     gps_speed_2 = ((encoder_2_ticks - last_2_ticks) * 1000 * 360) / (50 * 506);
     theta = calcular_angulo(dist_1,dist_2);
-    Control_PID(theta);
+    Control_PID(theta,angulo_deseado_pid);
     last_time_pid = millis();
     last_1_ticks = encoder_1_ticks;
     last_2_ticks = encoder_2_ticks;
   }
   //delay(100);
-  //RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100))); //desconentar para ejecutar suscriptores
+  RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100))); //desconentar para ejecutar suscriptores
 }

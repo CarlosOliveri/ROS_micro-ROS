@@ -4,7 +4,7 @@ colcon build
 source install/setup.bash
 
 Para correr el nodo que se comunica con el micro
-ros2 run robot_controller motor_node
+ros2 run my_robot_controller motor_node
 
 Para crear un paquete de ros2
 ros2 pkg create --build-type ament_python motor_controller --dependencies rclpy std_msgs

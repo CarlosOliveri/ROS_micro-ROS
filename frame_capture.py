@@ -9,7 +9,7 @@ import math
 import time
 from std_msgs.msg import Int32  # Cambiamos de Float32 a Int32
 from std_msgs.msg import Int32MultiArray
-import grafo
+from .grafo import Grafo, Nodo
 from std_srvs.srv import Trigger  # Servicio de ejemplo que no requiere parámetros
 
 #CONSTANTES DE INTERES
@@ -61,7 +61,7 @@ class FrameAnalysisService(Node):
         ret, frame = self.capture.read()
         
         if not ret:
-            self.capture.open(URL)  # Reconecta si no se pudo obtener el frame
+            self.capture.open(0)  # Reconecta si no se pudo obtener el frame
             time.sleep(1)  # Pausa breve para reconexión
             ret, frame = self.capture.read()
 
@@ -124,11 +124,11 @@ class FrameAnalysisService(Node):
             for k in range(num_div_y):
                 cv2.line(frame,(0,nh*(k+1)),(W,nh*(k+1)),(0, 0, 0), 1)
             
-            g1 = grafo.Grafo() # Se crea el grafo de nodos disponibles para transitar
+            g1 = Grafo() # Se crea el grafo de nodos disponibles para transitar
             #Se crean los nodos y se agregan al grafo
             for k in range(num_div_x):
                 for j in range(num_div_y):
-                    g1.agregar_vertice(grafo.Nodo(nw*(k+1),nh*(j+1)))
+                    g1.agregar_vertice(Nodo(nw*(k+1),nh*(j+1)))
             #verificamos los vecinos para agregar las aristas al grafo
             for k in g1.vertices:
                 try_nodo = g1.buscar_vertice(k.clave[0]+nw,k.clave[1])
@@ -148,7 +148,6 @@ class FrameAnalysisService(Node):
                     g1.agregar_aristas(k,try_nodo)
 
             response.message = g1.menor_trayecto(g1.buscar_nodo_cercano(robot_coord))
-
             while True:
                 cv2.imshow("Objetos Encontrados",frame)
                 t = cv2.waitKey(1)

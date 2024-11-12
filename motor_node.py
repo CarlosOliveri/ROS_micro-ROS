@@ -63,6 +63,13 @@ class MotorNode(Node):
             10
         )
 
+        self.create_subscription(
+            Int32,
+            '/set_angulo_deseado',
+            self.set_angulo_deseado_callback,
+            10
+        )
+
         # Crear publicador para la velocidad deseada
         self.publisher_speed_1 = self.create_publisher(Int32, 'motor_1_speed', 10)  # Cambiado a Int32
         # Variable para almacenar la velocidad deseada
@@ -75,6 +82,9 @@ class MotorNode(Node):
 
         self.publisher_sample_time = self.create_publisher(Int32, 'sample_time',10)
         self.desired_sample_time = 1
+
+        self.publisher_angulo_deseado = self.create_publisher(Int32, 'angulo_deseado',10)
+        self.angulo_deseado = 0
 
     def motor_speed_callback_1(self, msg):
         # Ahora recibimos un Int32
@@ -121,6 +131,10 @@ class MotorNode(Node):
         self.get_logger().info(f'Conteo encoder izquierdo: {datos[3]} pulsos, Conteo encoder derecho: {datos[4]} pulsos')
         self.get_logger().info("-------------------------------")
 
+    def set_angulo_deseado_callback(self,msg):
+        angulo = msg.data
+        self.get_logger().info(f'Nuevo angulo para enviar: {angulo}')
+
     # Método para publicar la velocidad deseada
     def publish_desired_speed_1(self):
         msg = Int32()
@@ -141,6 +155,12 @@ class MotorNode(Node):
         msg.data = self.desired_sample_time # Publicar la velocidad deseada como Int32
         self.publisher_sample_time.publish(msg)
         self.get_logger().info(f'Publishing desired sample time: {msg.data} m.')
+    
+    def publish_angulo_deseado(self):
+        msg = Int32()
+        msg.data = self.angulo_deseado
+        self.publisher_angulo_deseado.publish(msg)
+        self.get_logger().info(f'Publishing angulo deseado: {msg.data}°')
 
 def main(args=None):
     rclpy.init(args=args)
