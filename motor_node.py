@@ -133,6 +133,7 @@ class MotorNode(Node):
 
     def set_angulo_deseado_callback(self,msg):
         angulo = msg.data
+        self.publisher_angulo_deseado.publish(msg)
         self.get_logger().info(f'Nuevo angulo para enviar: {angulo}')
 
     # Método para publicar la velocidad deseada

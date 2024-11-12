@@ -1,4 +1,7 @@
 #include <micro_ros_arduino.h>
+#include <yaml.h>
+
+#include <micro_ros_arduino.h>
 #include <WiFi.h>  // Se añade la librería WiFi
 #include <stdio.h>
 #include <rcl/rcl.h>
@@ -87,12 +90,12 @@ float current_speed_1 = 0;  // Velocidad calculada del motor 1
 float desired_speed_1 = 0;
 float current_speed_2 = 0;  // Velocidad calculada del motor 2
 float desired_speed_2 = 0;
-float angulo_deseado_pid = 0;
+float angulo_deseado_pid = 3.14*2;
 
 //Variables de PID
 float error_anterior = 0;//en angulos
 float I = 0; //Termino Integral
-int velocidad_base = 900; //grados/s
+int velocidad_base = 100; //grados/s
 float radio_rueda = 0.0375;
 float dist_base = 0.225;
 int initial_time = 0;
@@ -103,10 +106,10 @@ float dist_2 = 0;
 float theta = 0;
 int last_2_ticks = 0;
 int last_1_ticks = 0;
-int kp = 1;
-int ki = 0;
-int kd = 0;
-float pid_Array [5];
+int kp = 100;
+int ki = 50;
+int kd = 10;
+float pid_Array [5] = {0.0,0.0,0.0,0.0,0.0};
 
 #define PWM_CHANNEL_0 0     // Canal de PWM 1
 #define PWM_CHANNEL_1 1     // Canal de PWM 2
@@ -185,7 +188,7 @@ void Control_PID(float actual_theta,float theta_deseado){
 
   pid_msg.data.data[0] = (int32_t)gps_speed_1;
   pid_msg.data.data[1] = (int32_t)gps_speed_2;
-  pid_msg.data.data[2] = (int32_t)(error * 180/3.24);
+  pid_msg.data.data[2] = (int32_t)(error * 180/3.14);
   pid_msg.data.data[3] = (int32_t)encoder_1_ticks;
   pid_msg.data.data[4] = (int32_t)encoder_2_ticks; 
 
@@ -195,11 +198,12 @@ void Control_PID(float actual_theta,float theta_deseado){
   Serial.print(", ");
   Serial.print(error * 180/3.14);
   Serial.print(", ");
-  Serial.print(encoder_1_ticks);
+  Serial.print(salida_control);
   Serial.print(", ");
   Serial.println(encoder_2_ticks);
-
+  //Serial.println(theta_deseado);
   error_anterior = error;
+  salida_control = 0;
 }
 
 // Callback de la suscripción: Ajusta la velocidad del motor
@@ -264,6 +268,9 @@ void subscription_sample_time_callback(const void *msgin) {
 }
 
 void subscription_angulo_deseado_callback(const void *msgin){
+  digitalWrite(LED_PIN, HIGH);
+  delay(100);
+  digitalWrite(LED_PIN, LOW);
   const std_msgs__msg__Int32 *msg = (const std_msgs__msg__Int32 *)msgin;
   angulo_deseado_pid = (msg->data)*3.14/180;
   Serial.print("Se Cambio el angulo deseado del PID: ");
@@ -298,7 +305,7 @@ void leer_sensores(float *distancias) {
 void setup() {
   Serial.begin(115200);
   //set_microros_wifi_transports("Flia Martinez", "nomeacuerdo@", "192.168.100.175", 8888);
-  set_microros_wifi_transports("FIUNA", "fiuna#2024", "172.16.245.144", 8888);
+  //set_microros_wifi_transports("FIUNA", "fiuna#2024", "172.16.245.144", 8888);
 
   //Configuracion de direccion de motores
   pinMode(MOTOR_DIR_PIN_1, OUTPUT);
@@ -340,6 +347,7 @@ void setup() {
   allocator = rcl_get_default_allocator();
   // Inicializa las opciones de soporte
   RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
+
   // Crear nodo
   RCCHECK(rclc_node_init_default(&node, "motor_controller_node", "", &support));
 
@@ -350,7 +358,7 @@ void setup() {
     ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
     "motor_1_speed"));
 
-  // Crear suscriptor para la velocidad deseada del motor 2
+  // Crear suscriptor para la velocidad deseada del motor 2angulo_deseado_msg
   RCCHECK(rclc_subscription_init_default(
     &speed_2_subscriber,
     &node,
@@ -364,7 +372,6 @@ void setup() {
     ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
     "sample_time"));
 
-  // Crear suscriptor para la velocidad deseada
   RCCHECK(rclc_subscription_init_default(
     &angulo_deseado_subscriber,
     &node,
@@ -397,8 +404,8 @@ void setup() {
     ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32MultiArray),
     "PID_debugger"));
 
-  // Crear ejecutor y agregar suscriptor
-  RCCHECK(rclc_executor_init(&executor, &support.context, 3, &allocator));
+  //Crear ejecutor y agregar suscriptor
+  RCCHECK(rclc_executor_init(&executor, &support.context, 4, &allocator));
   RCCHECK(rclc_executor_add_subscription(&executor, &speed_1_subscriber, &speed_1_msg, &subscription_speed_1_callback, ON_NEW_DATA));
   RCCHECK(rclc_executor_add_subscription(&executor, &speed_2_subscriber, &speed_2_msg, &subscription_speed_2_callback, ON_NEW_DATA));
   RCCHECK(rclc_executor_add_subscription(&executor, &sample_time_subscriber, &sample_time_msg, &subscription_sample_time_callback, ON_NEW_DATA));
@@ -407,6 +414,7 @@ void setup() {
   speed_1_msg.data = 0;
   speed_2_msg.data = 0;
   sample_time_msg.data = 0;
+  angulo_deseado_msg.data = 0;
 
   ultrasonic_msg.data.size = 3;
   ultrasonic_msg.data.capacity = 3;
@@ -418,23 +426,23 @@ void setup() {
 }
 
 void loop() {
-  if (Debug == true){
-    if (millis() - last_wait_time >= wait_time){
-      RCSOFTCHECK(rcl_publish(&pid_debugger_publisher, &pid_msg, NULL));
-    }
-  }
+  // if (Debug == true){
+  //   if (millis() - last_wait_time >= wait_time){
+  //     RCSOFTCHECK(rcl_publish(&pid_debugger_publisher, &pid_msg, NULL));
+  //   }
+  // }
 
-  if (millis() - ultima_medicion >= tiempo_medicion) {
-    leer_sensores(distancias);
-    distancias[0] = leer_distancia(TRIG_PIN_1, ECHO_PIN_1);  // Sensor 1
-    distancias[1] = leer_distancia(TRIG_PIN_2, ECHO_PIN_2);  // Sensor 2
-    distancias[2] = leer_distancia(TRIG_PIN_3, ECHO_PIN_3);  // Sensor 3
-    ultima_medicion = millis();
-    for (int i = 0; i < 3; i++) {
-      ultrasonic_msg.data.data[i] = (int32_t)distancias[i];
-    } 
-    RCSOFTCHECK(rcl_publish(&ultrasonic_publisher, &ultrasonic_msg, NULL));
-  }
+  // if (millis() - ultima_medicion >= tiempo_medicion) {
+  //   leer_sensores(distancias);
+  //   distancias[0] = leer_distancia(TRIG_PIN_1, ECHO_PIN_1);  // Sensor 1
+  //   distancias[1] = leer_distancia(TRIG_PIN_2, ECHO_PIN_2);  // Sensor 2
+  //   distancias[2] = leer_distancia(TRIG_PIN_3, ECHO_PIN_3);  // Sensor 3
+  //   ultima_medicion = millis();
+  //   for (int i = 0; i < 3; i++) {
+  //     ultrasonic_msg.data.data[i] = (int32_t)distancias[i];
+  //   } 
+  //   //RCSOFTCHECK(rcl_publish(&ultrasonic_publisher, &ultrasonic_msg, NULL));
+  // }
   // Publicar la velocidad actual del motor (basada en el encoder)
   /*unsigned long current_time = millis();
   unsigned long elapsed_time = current_time - last_time;
@@ -460,11 +468,12 @@ void loop() {
     gps_speed_1 = ((encoder_1_ticks - last_1_ticks) * 1000 * 360) / (50 * 506);
     gps_speed_2 = ((encoder_2_ticks - last_2_ticks) * 1000 * 360) / (50 * 506);
     theta = calcular_angulo(dist_1,dist_2);
-    Control_PID(theta,angulo_deseado_pid);
+    //Control_PID(theta,angulo_deseado_pid);
     last_time_pid = millis();
     last_1_ticks = encoder_1_ticks;
     last_2_ticks = encoder_2_ticks;
   }
+  Serial.println("solucion");
   //delay(100);
-  RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100))); //desconentar para ejecutar suscriptores
+  //RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(50))); //desconentar para ejecutar suscriptores
 }
