@@ -93,8 +93,11 @@ void Control_PID(float actual_theta,float theta_deseada){
   Serial.print(abs(theta*180/3.14));
   Serial.print(", ");
   Serial.println(theta_Des*180/3.14);
+  Serial.print(", ");
+  Serial.println(salida_control);
 
   error_anterior = error;
+  salida_control = 0;
 }
 
 void setup() {
@@ -119,7 +122,7 @@ void setup() {
   ledcAttachPin(MOTOR_PWM_PIN_1, PWM_CHANNEL_0); //izquierda
   delay(2000);
 }
-int bandera = 0;
+int bandera = 1;
 void loop() {
   while (bandera == 0){
     float m = coord_y/coord_x;

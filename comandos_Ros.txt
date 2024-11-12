@@ -4,7 +4,7 @@ colcon build
 source install/setup.bash
 
 Para correr el nodo que se comunica con el micro
-ros2 run robot_controller motor_node
+ros2 run my_robot_controller motor_node
 
 Para crear un paquete de ros2
 ros2 pkg create --build-type ament_python motor_controller --dependencies rclpy std_msgs
@@ -23,8 +23,4 @@ ros2 topic pub /set_motor_speed_2 std_msgs/msg/Int32 "{data: 50}"
 
 ros2 topic pub /set_sample_time std_msgs/msg/Int32 "{data: 5000}"
 
-https://adafruit.github.io/arduino-board-index/package_adafruit_index.json
-https://dl.espressif.com/dl/package_esp32_index.json
-https://github.com/micro-ROS/micro_ros_arduino.git
-https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-https://resource.heltec.cn/download/package_heltec_esp32_index.json
+https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package.esp32-index.json
