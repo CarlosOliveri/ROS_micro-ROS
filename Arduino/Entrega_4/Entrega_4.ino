@@ -11,6 +11,7 @@
 #include <std_msgs/msg/int32.h>
 #include <std_msgs/msg/float32.h>
 #include <std_msgs/msg/int32_multi_array.h>
+#include <geometry_msgs/msg/point.h>
 
 
 // Pines del motor y encoder 1
@@ -68,6 +69,7 @@ rcl_subscription_t speed_1_subscriber;          //escucha la velocidad deseada p
 rcl_subscription_t speed_2_subscriber;          //escucha la velocidad deseada para el motor 2
 rcl_subscription_t sample_time_subscriber;      //escucha el tiempo de muestreo de los sensores ultrasonicos
 rcl_subscription_t angulo_deseado_subscriber;
+rcl_subscription_t coordenadas_deseadas_subscriber;
 rcl_publisher_t speed_1_publisher;              //Publica la velocidad calculada del encoder 1
 rcl_publisher_t speed_2_publisher;              //Publica la velocidad calculada del encoder 2
 rcl_publisher_t ultrasonic_publisher;           //Publicas lecturas de los ultrasonicos en un array
@@ -76,6 +78,7 @@ std_msgs__msg__Int32 speed_1_msg;               //variable de velocidad de motor
 std_msgs__msg__Int32 speed_2_msg;               //variable de velocidad de motor 2
 std_msgs__msg__Int32 sample_time_msg;           //variable de tiempo de muestreo de sensores
 std_msgs__msg__Int32 angulo_deseado_msg;
+std_msgs__msg__Int32MultiArray coord_deseada_msg;
 std_msgs__msg__Int32MultiArray ultrasonic_msg;  //variable de lecturas de los sensores
 std_msgs__msg__Int32MultiArray pid_msg;
 rclc_executor_t executor;
@@ -90,12 +93,14 @@ float current_speed_1 = 0;  // Velocidad calculada del motor 1
 float desired_speed_1 = 0;
 float current_speed_2 = 0;  // Velocidad calculada del motor 2
 float desired_speed_2 = 0;
-float angulo_deseado_pid = 3.14*2;
+float angulo_deseado_pid = 0;
+float X_coord = 0;
+float Y_coord = 0;
 
 //Variables de PID
 float error_anterior = 0;//en angulos
 float I = 0; //Termino Integral
-int velocidad_base = 100; //grados/s
+int velocidad_base = 250; //grados/s
 float radio_rueda = 0.0375;
 float dist_base = 0.225;
 int initial_time = 0;
@@ -179,6 +184,12 @@ void Control_PID(float actual_theta,float theta_deseado){
   
   ledcWrite(PWM_CHANNEL_0, velocidad_1);  // Ajustar la señal PWM
   ledcWrite(PWM_CHANNEL_1, velocidad_2);  // Ajustar la señal PWM
+
+  /* pid_Array[0] = gps_speed_1;
+  pid_Array[1] = gps_speed_2;
+  pid_Array[2] = error * 180/3.24;
+  pid_Array[3] = encoder_1_ticks;
+  pid_Array[4] = encoder_2_ticks; */
 
   /* pid_Array[0] = gps_speed_1;
   pid_Array[1] = gps_speed_2;
@@ -277,6 +288,19 @@ void subscription_angulo_deseado_callback(const void *msgin){
   Serial.println(angulo_deseado_pid);
 }
 
+void subscription_coordenadas_deseadas_callback(const void * msgin){
+  digitalWrite(LED_PIN, HIGH);
+  delay(100);
+  digitalWrite(LED_PIN, LOW);
+  const std_msgs__msg__Int32MultiArray * msg = (const std_msgs__msg__Int32MultiArray *)msgin;
+  X_coord = msg->data.data[0];
+  Y_coord = msg->data.data[1];
+  Serial.print("Se Cambio la coordenada deseada");
+  Serial.print(X_coord);
+  Serial.print(", ");
+  Serial.println(Y_coord);
+}
+
 float leer_distancia(int TRIG_PIN, int ECHO_PIN) {
   //Lectura de sensores ultrasonicos
   long duration;
@@ -304,7 +328,7 @@ void leer_sensores(float *distancias) {
 
 void setup() {
   Serial.begin(115200);
-  //set_microros_wifi_transports("Flia Martinez", "nomeacuerdo@", "192.168.100.175", 8888);
+  set_microros_wifi_transports("Flia Martinez", "nomeacuerdo@", "192.168.100.175", 8888);
   //set_microros_wifi_transports("FIUNA", "fiuna#2024", "172.16.245.144", 8888);
 
   //Configuracion de direccion de motores
@@ -378,6 +402,12 @@ void setup() {
     ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
     "angulo_deseado"));
 
+  RCCHECK(rclc_subscription_init_default(
+    &coordenadas_deseadas_subscriber,
+    &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32MultiArray),
+    "new_coordenadas"));
+
   // Crear publicador para la velocidad actual del motor 1
   RCCHECK(rclc_publisher_init_default(
     &speed_1_publisher,
@@ -405,16 +435,21 @@ void setup() {
     "PID_debugger"));
 
   //Crear ejecutor y agregar suscriptor
-  RCCHECK(rclc_executor_init(&executor, &support.context, 4, &allocator));
+  RCCHECK(rclc_executor_init(&executor, &support.context, 5, &allocator));
   RCCHECK(rclc_executor_add_subscription(&executor, &speed_1_subscriber, &speed_1_msg, &subscription_speed_1_callback, ON_NEW_DATA));
   RCCHECK(rclc_executor_add_subscription(&executor, &speed_2_subscriber, &speed_2_msg, &subscription_speed_2_callback, ON_NEW_DATA));
   RCCHECK(rclc_executor_add_subscription(&executor, &sample_time_subscriber, &sample_time_msg, &subscription_sample_time_callback, ON_NEW_DATA));
   RCCHECK(rclc_executor_add_subscription(&executor, &angulo_deseado_subscriber,&angulo_deseado_msg,&subscription_angulo_deseado_callback,ON_NEW_DATA));
+  RCCHECK(rclc_executor_add_subscription(&executor, &coordenadas_deseadas_subscriber,&coord_deseada_msg,&subscription_coordenadas_deseadas_callback,ON_NEW_DATA));
   
   speed_1_msg.data = 0;
   speed_2_msg.data = 0;
   sample_time_msg.data = 0;
   angulo_deseado_msg.data = 0;
+
+  coord_deseada_msg.data.size = 2;
+  coord_deseada_msg.data.capacity = 2;
+  coord_deseada_msg.data.data = (int32_t *)malloc(2 * sizeof(int32_t));
 
   ultrasonic_msg.data.size = 3;
   ultrasonic_msg.data.capacity = 3;
@@ -462,18 +497,18 @@ void loop() {
   }*/
   //////////////////////////////////////////////
   //Serial.print("Enviando paquetes ...");
-  if (millis() - last_time_pid >= sample_time){
+  //if (millis() - last_time_pid >= sample_time){
     dist_1 =  encoder_1_ticks * 2 * 3.1416 * radio_rueda / (506);
     dist_2 =  encoder_2_ticks * 2 * 3.1416 * radio_rueda / (506);
     gps_speed_1 = ((encoder_1_ticks - last_1_ticks) * 1000 * 360) / (50 * 506);
     gps_speed_2 = ((encoder_2_ticks - last_2_ticks) * 1000 * 360) / (50 * 506);
     theta = calcular_angulo(dist_1,dist_2);
-    //Control_PID(theta,angulo_deseado_pid);
+    Control_PID(theta,angulo_deseado_pid);
     last_time_pid = millis();
     last_1_ticks = encoder_1_ticks;
     last_2_ticks = encoder_2_ticks;
-  }
-  Serial.println("solucion");
+  //}
+  //Serial.println("solucion");
   //delay(100);
-  //RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(50))); //desconentar para ejecutar suscriptores
+  RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(50))); //desconentar para ejecutar suscriptores
 }

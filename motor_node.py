@@ -3,7 +3,9 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Int32  # Cambiamos de Float32 a Int32
 from std_msgs.msg import Int32MultiArray
+from std_msgs.msg import Float32MultiArray
 from std_srvs.srv import Trigger
+
 
 class MotorNode(Node):
     def __init__(self):
@@ -70,6 +72,20 @@ class MotorNode(Node):
             10
         )
 
+        self.create_subscription(
+            Float32MultiArray,
+            '/set_trayectoria',
+            self.set_nueva_trayectoria_callback,
+            10
+        )
+
+        self.create_subscription(
+            Int32,
+            '/coord_request',
+            self.coord_request_callback,
+            10
+        )
+
         # Crear publicador para la velocidad deseada
         self.publisher_speed_1 = self.create_publisher(Int32, 'motor_1_speed', 10)  # Cambiado a Int32
         # Variable para almacenar la velocidad deseada
@@ -86,6 +102,14 @@ class MotorNode(Node):
         self.publisher_angulo_deseado = self.create_publisher(Int32, 'angulo_deseado',10)
         self.angulo_deseado = 0
 
+        self.publisher_trayectoria_request = self.create_publisher(Int32, 'trayectoria_request',10)
+
+        self.publisher_coord_deseada = self.create_publisher(Float32MultiArray, 'new_coordenadas',10)
+        self.coordenadas = []
+        self.trayectoria = []
+        self.point = 0
+
+    ################### CALLBACKS  ##########################
     def motor_speed_callback_1(self, msg):
         # Ahora recibimos un Int32
         self.get_logger().info(f'Current motor speed 1: {msg.data} rad/min')
@@ -132,9 +156,29 @@ class MotorNode(Node):
         self.get_logger().info("-------------------------------")
 
     def set_angulo_deseado_callback(self,msg):
-        angulo = msg.data
-        self.publisher_angulo_deseado.publish(msg)
-        self.get_logger().info(f'Nuevo angulo para enviar: {angulo}')
+        self.angulo_deseado = msg.data
+        self.publish_angulo_deseado()
+        self.get_logger().info(f'Nuevo angulo para enviar: {self.angulo_deseado}')
+
+    def set_nueva_trayectoria_callback(self,msg):
+        self.trayectoria = [[float(msg.data[i]),float(msg.data[i+1])] for i in range(0,len(msg.data),2)]
+        self.point = 0
+        self.get_logger().info(f'Nueva Trayectoria Recibida ({self.trayectoria[0][0]}, {self.trayectoria[0][1]})')
+        self.coordenadas = self.trayectoria[self.point]
+        self.point = self.point + 1
+        self.publish_coord_deseada()
+
+    def coord_request_callback(self,msg):
+        if (msg.data == 0):
+            #self.trayectoria = [[2,3],[4,5],[6,7]] #para rueba
+            self.coordenadas = [self.trayectoria[self.point][0],self.trayectoria[self.point][1]]
+            self.point = self.point + 1
+            self.publish_coord_deseada()
+        elif (msg.data == 1):
+            self.publish_trayectoria_request()
+            pass
+
+    #################### PUBLISHERS #######################
 
     # Método para publicar la velocidad deseada
     def publish_desired_speed_1(self):
@@ -162,6 +206,17 @@ class MotorNode(Node):
         msg.data = self.angulo_deseado
         self.publisher_angulo_deseado.publish(msg)
         self.get_logger().info(f'Publishing angulo deseado: {msg.data}°')
+    
+    def publish_coord_deseada(self):
+        msg = Float32MultiArray()
+        msg.data = [self.coordenadas[0],self.coordenadas[1]]
+        self.publisher_coord_deseada.publish(msg)
+        self.get_logger().info(f'Publishing coordenada deseada: ({msg.data[0]},{msg.data[1]})')
+
+    def publish_trayectoria_request(self):
+        msg = Int32()
+        msg.data = 0
+        self.publisher_trayectoria_request.publish(msg)
 
 def main(args=None):
     rclpy.init(args=args)
