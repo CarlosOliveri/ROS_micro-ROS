@@ -170,10 +170,13 @@ class MotorNode(Node):
 
     def coord_request_callback(self,msg):
         if (msg.data == 0):
-            #self.trayectoria = [[2,3],[4,5],[6,7]] #para rueba
-            self.coordenadas = [self.trayectoria[self.point][0],self.trayectoria[self.point][1]]
-            self.point = self.point + 1
-            self.publish_coord_deseada()
+            self.trayectoria = [[2,3],[4,5],[6,7]] #para rueba
+            try:
+                self.coordenadas = [self.trayectoria[self.point][0],self.trayectoria[self.point][1]]
+                self.point = self.point + 1
+                self.publish_coord_deseada()
+            except:
+                pass
         elif (msg.data == 1):
             self.publish_trayectoria_request()
             pass

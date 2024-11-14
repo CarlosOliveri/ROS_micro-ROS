@@ -11,6 +11,7 @@
 #include <std_msgs/msg/int32.h>
 #include <std_msgs/msg/float32.h>
 #include <std_msgs/msg/int32_multi_array.h>
+#include <std_msgs/msg/float32_multi_array.h>
 #include <geometry_msgs/msg/point.h>
 
 
@@ -74,13 +75,15 @@ rcl_publisher_t speed_1_publisher;              //Publica la velocidad calculada
 rcl_publisher_t speed_2_publisher;              //Publica la velocidad calculada del encoder 2
 rcl_publisher_t ultrasonic_publisher;           //Publicas lecturas de los ultrasonicos en un array
 rcl_publisher_t pid_debugger_publisher;                   //Publica lectura del PID
+rcl_publisher_t coord_request_publisher;
 std_msgs__msg__Int32 speed_1_msg;               //variable de velocidad de motor 1
 std_msgs__msg__Int32 speed_2_msg;               //variable de velocidad de motor 2
 std_msgs__msg__Int32 sample_time_msg;           //variable de tiempo de muestreo de sensores
 std_msgs__msg__Int32 angulo_deseado_msg;
-std_msgs__msg__Int32MultiArray coord_deseada_msg;
+std_msgs__msg__Float32MultiArray coord_deseada_msg;
 std_msgs__msg__Int32MultiArray ultrasonic_msg;  //variable de lecturas de los sensores
 std_msgs__msg__Int32MultiArray pid_msg;
+std_msgs__msg__Int32 request_coord_msg;
 rclc_executor_t executor;
 rclc_support_t support;
 rcl_allocator_t allocator;
@@ -94,13 +97,21 @@ float desired_speed_1 = 0;
 float current_speed_2 = 0;  // Velocidad calculada del motor 2
 float desired_speed_2 = 0;
 float angulo_deseado_pid = 0;
-float X_coord = 0;
-float Y_coord = 0;
+float X_coord = NULL;
+float Y_coord = NULL;
+float X_actual_coord = 0;
+float Y_actual_coord = 0;
+int state = 0;
+int time_request_coord = 0;
+float dist_1_h = 0;
+float dist_2_h = 0;
+float last_1_h = 0;
+float last_2_h = 0;
 
 //Variables de PID
 float error_anterior = 0;//en angulos
 float I = 0; //Termino Integral
-int velocidad_base = 250; //grados/s
+int velocidad_base = 500; //grados/s
 float radio_rueda = 0.0375;
 float dist_base = 0.225;
 int initial_time = 0;
@@ -209,9 +220,9 @@ void Control_PID(float actual_theta,float theta_deseado){
   Serial.print(", ");
   Serial.print(error * 180/3.14);
   Serial.print(", ");
-  Serial.print(salida_control);
+  Serial.print(dist_1);
   Serial.print(", ");
-  Serial.println(encoder_2_ticks);
+  Serial.println(dist_2);
   //Serial.println(theta_deseado);
   error_anterior = error;
   salida_control = 0;
@@ -292,7 +303,7 @@ void subscription_coordenadas_deseadas_callback(const void * msgin){
   digitalWrite(LED_PIN, HIGH);
   delay(100);
   digitalWrite(LED_PIN, LOW);
-  const std_msgs__msg__Int32MultiArray * msg = (const std_msgs__msg__Int32MultiArray *)msgin;
+  const std_msgs__msg__Float32MultiArray * msg = (const std_msgs__msg__Float32MultiArray *)msgin;
   X_coord = msg->data.data[0];
   Y_coord = msg->data.data[1];
   Serial.print("Se Cambio la coordenada deseada");
@@ -328,8 +339,8 @@ void leer_sensores(float *distancias) {
 
 void setup() {
   Serial.begin(115200);
-  set_microros_wifi_transports("Flia Martinez", "nomeacuerdo@", "192.168.100.175", 8888);
-  //set_microros_wifi_transports("FIUNA", "fiuna#2024", "172.16.245.144", 8888);
+  //set_microros_wifi_transports("Flia Martinez", "nomeacuerdo@", "192.168.100.175", 8888);
+  set_microros_wifi_transports("FIUNA", "fiuna#2024", "172.16.245.144", 8888);
 
   //Configuracion de direccion de motores
   pinMode(MOTOR_DIR_PIN_1, OUTPUT);
@@ -405,8 +416,14 @@ void setup() {
   RCCHECK(rclc_subscription_init_default(
     &coordenadas_deseadas_subscriber,
     &node,
-    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32MultiArray),
+    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32MultiArray),
     "new_coordenadas"));
+
+  RCCHECK(rclc_publisher_init_default(
+    &coord_request_publisher,
+    &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
+    "coord_request"));
 
   // Crear publicador para la velocidad actual del motor 1
   RCCHECK(rclc_publisher_init_default(
@@ -449,7 +466,7 @@ void setup() {
 
   coord_deseada_msg.data.size = 2;
   coord_deseada_msg.data.capacity = 2;
-  coord_deseada_msg.data.data = (int32_t *)malloc(2 * sizeof(int32_t));
+  coord_deseada_msg.data.data = (float *)malloc(2 * sizeof(float));
 
   ultrasonic_msg.data.size = 3;
   ultrasonic_msg.data.capacity = 3;
@@ -461,11 +478,11 @@ void setup() {
 }
 
 void loop() {
-  // if (Debug == true){
-  //   if (millis() - last_wait_time >= wait_time){
-  //     RCSOFTCHECK(rcl_publish(&pid_debugger_publisher, &pid_msg, NULL));
-  //   }
-  // }
+  if (Debug == true){
+    if (millis() - last_wait_time >= wait_time){
+      RCSOFTCHECK(rcl_publish(&pid_debugger_publisher, &pid_msg, NULL));
+    }
+  }
 
   // if (millis() - ultima_medicion >= tiempo_medicion) {
   //   leer_sensores(distancias);
@@ -497,18 +514,96 @@ void loop() {
   }*/
   //////////////////////////////////////////////
   //Serial.print("Enviando paquetes ...");
-  //if (millis() - last_time_pid >= sample_time){
-    dist_1 =  encoder_1_ticks * 2 * 3.1416 * radio_rueda / (506);
-    dist_2 =  encoder_2_ticks * 2 * 3.1416 * radio_rueda / (506);
-    gps_speed_1 = ((encoder_1_ticks - last_1_ticks) * 1000 * 360) / (50 * 506);
-    gps_speed_2 = ((encoder_2_ticks - last_2_ticks) * 1000 * 360) / (50 * 506);
-    theta = calcular_angulo(dist_1,dist_2);
-    Control_PID(theta,angulo_deseado_pid);
-    last_time_pid = millis();
-    last_1_ticks = encoder_1_ticks;
-    last_2_ticks = encoder_2_ticks;
-  //}
-  //Serial.println("solucion");
+  if (state == 0){
+    //Coordenada Request
+    request_coord_msg.data = 0;
+    RCSOFTCHECK(rcl_publish(&coord_request_publisher, &request_coord_msg, NULL))
+    state = 1;
+    time_request_coord = millis();
+    Serial.println("Solicitud de Coordenada");
+    last_1_h = 0;
+    last_2_h = 0;
+  }
+  if (state == 1){
+    if (millis() - time_request_coord == 7000){
+      state = 0;
+    }else if (X_coord != NULL || Y_coord != NULL){
+      state = 2;
+    }
+    Serial.println("Esperando Coordenada");
+    delay(100);
+    RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100)));
+  }
+  if (state == 2){
+    //direccionarse hacia la cordenada y avanzar
+    if (X_coord - X_actual_coord <= 0.001){
+      if (Y_coord > Y_actual_coord){
+        angulo_deseado_pid = 0;
+      }else{
+        angulo_deseado_pid = 3.14;
+      }
+    }else{
+      float m = (Y_coord - Y_actual_coord) / (X_coord - X_actual_coord);
+      if (m == 0){
+        if (X_coord > X_actual_coord){
+          angulo_deseado_pid = 3.14/2;
+        }else{
+          angulo_deseado_pid = -3.14/2;
+        }
+      }else{
+        angulo_deseado_pid = atan(m);
+      }
+    }
+    //Serial.println(angulo_deseado_pid);
+    //delay(3000);
+    float h = sqrt(pow(Y_coord - Y_actual_coord,2) + pow(Y_coord - Y_actual_coord,2));
+    if (millis() - last_time_pid >= sample_time){
+      //deshabilitar executor para que funcione bien el PID
+      dist_1 =  encoder_1_ticks * 2 * 3.1416 * radio_rueda / (506);
+      dist_2 =  encoder_2_ticks * 2 * 3.1416 * radio_rueda / (506);
+      gps_speed_1 = ((encoder_1_ticks - last_1_ticks) * 1000 * 360) / (50 * 506);
+      gps_speed_2 = ((encoder_2_ticks - last_2_ticks) * 1000 * 360) / (50 * 506);
+      theta = calcular_angulo(dist_1,dist_2);
+      Control_PID(theta,angulo_deseado_pid);
+      last_time_pid = millis();
+      dist_1_h =  (encoder_1_ticks - last_1_h) * 2 * 3.1416 * radio_rueda / (506);
+      dist_2_h =  (encoder_2_ticks - last_2_h) * 2 * 3.1416 * radio_rueda / (506);
+      last_1_ticks = encoder_1_ticks;
+      last_2_ticks = encoder_2_ticks;
+      X_actual_coord = (dist_1+dist_2)*cos(theta)/2;
+      Y_actual_coord = (dist_1+dist_2)*sin(theta)/2;
+    }
+
+    if (dist_1_h >= h && dist_2_h >= h){
+      ledcWrite(PWM_CHANNEL_0, 0);  // Ajustar la señal PWM
+      ledcWrite(PWM_CHANNEL_1, 0);  // Ajustar la señal PWM
+      X_coord = NULL;
+      Y_coord = NULL;
+      dist_1_h = 0;
+      dist_2_h = 0;
+      state = 0;
+    }
+    Serial.println("Avanzando");
+    //leer sensores ultrasonicos
+    //if (HAY OBSTACULOS?){
+      //ledcWrite(PWM_CHANNEL_0, velocidad_1);  // Ajustar la señal PWM
+      //ledcWrite(PWM_CHANNEL_1, velocidad_2);  // Ajustar la señal PWM
+      //PEDIR TRAYECTORIA NUEVA
+      //state = 1;
+  }
+
+  // if (millis() - last_time_pid >= sample_time){
+  //   dist_1 =  encoder_1_ticks * 2 * 3.1416 * radio_rueda / (506);
+  //   dist_2 =  encoder_2_ticks * 2 * 3.1416 * radio_rueda / (506);
+  //   gps_speed_1 = ((encoder_1_ticks - last_1_ticks) * 1000 * 360) / (50 * 506);
+  //   gps_speed_2 = ((encoder_2_ticks - last_2_ticks) * 1000 * 360) / (50 * 506);
+  //   theta = calcular_angulo(dist_1,dist_2);
+  //   Control_PID(theta,angulo_deseado_pid);
+  //   last_time_pid = millis();
+  //   last_1_ticks = encoder_1_ticks;
+  //   last_2_ticks = encoder_2_ticks;
+  // }
+
   //delay(100);
-  RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(50))); //desconentar para ejecutar suscriptores
+  //RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(50))); //desconentar para ejecutar suscriptores
 }
