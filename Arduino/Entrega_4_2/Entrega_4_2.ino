@@ -97,6 +97,9 @@ float desired_speed_1 = 0;
 float current_speed_2 = 0;  // Velocidad calculada del motor 2
 float desired_speed_2 = 0;
 float angulo_deseado_pid = 0;
+float angulo_correccion = 0;
+float angulo_giro = 0;
+float angulo_anterior = 0;
 float X_coord = 100000;
 float Y_coord = 100000;
 float X_actual_coord = 0;
@@ -117,7 +120,7 @@ float h = 0; //Hipotenusa de triangulo rectangulo
 float error_anterior = 0;//en angulos
 float I = 0; //Termino Integral
 int velocidad_base = 250; //grados/s
-float radio_rueda = 0.029;
+float radio_rueda = 0.0375;
 float dist_base = 0.225;
 int initial_time = 0;
 float gps_speed_1 = 0;
@@ -127,7 +130,7 @@ float dist_2 = 0;
 float theta = 0;
 int last_2_ticks = 0;
 int last_1_ticks = 0;
-int kp = 200;
+int kp = 100;
 int ki = 50;
 int kd = 10;
 float pid_Array [5] = {0.0,0.0,0.0,0.0,0.0};
@@ -166,27 +169,75 @@ IPAddress agent_ip(172, 16, 227, 52);  // IP del agente micro-ROS
 size_t agent_port = 8888;              // Puerto del agente micro-ROS
 */
 
-void IRAM_ATTR encoder_1_isr() {
+void IRAM_ATTR encoder_1A_isr() {
   // Incrementar contador de ticks del encoder
   //Serial.println(encoder_1_ticks);
+  // if (digitalRead(ENCODER_PIN_A_1) == digitalRead(ENCODER_PIN_B_1)){
+  //   encoder_1_ticks--;  
+  // }else{
+  //   encoder_1_ticks++;
+  // }
   encoder_1_ticks++;
 }
 
-void IRAM_ATTR encoder_2_isr() {
+// void IRAM_ATTR encoder_1B_isr() {
+//   // Incrementar contador de ticks del encoder
+//   //Serial.println(encoder_1_ticks);
+//   encoder_1_ticks++;
+// }
+
+void IRAM_ATTR encoder_2A_isr() {
   // Incrementar contador de ticks del encoder
   //Serial.println(encoder_2_ticks);
+  // if (digitalRead(ENCODER_PIN_A_1) == digitalRead(ENCODER_PIN_B_1)){
+  //   encoder_2_ticks--;  
+  // }else{
+  //   encoder_2_ticks++;
+  // }
   encoder_2_ticks++;
 }
 
+// void IRAM_ATTR encoder_2B_isr() {
+//   // Incrementar contador de ticks del encoder
+//   //Serial.println(encoder_2_ticks);
+//   encoder_2_ticks++;
+// }
+
 float calcular_angulo(float dist_1,float dist_2 ){
   return (dist_2 - dist_1) / dist_base;
-  //Serial.println(theta * 180 / 3.1416);
-  //Serial.println(encoder_1_ticks);
-  //Serial.println(encoder_2_ticks);
 }
 
-void Control_PID(float actual_theta,float theta_deseado){
-  float error = - theta_deseado + actual_theta;
+float calcular_angulo_giro(float dist_1,float dist_2 ){
+  return (dist_2 + dist_1) / dist_base;
+}
+
+bool Girar(float angulo_giro){
+  while (true){
+    if (angulo_giro > 0){
+      digitalWrite(MOTOR_DIR_PIN_1,LOW);
+      digitalWrite(MOTOR_DIR_PIN_2,HIGH);
+    }else{
+      digitalWrite(MOTOR_DIR_PIN_1,HIGH);
+      digitalWrite(MOTOR_DIR_PIN_2,LOW);
+    }
+    ledcWrite(PWM_CHANNEL_0, 100);  // Detener
+    ledcWrite(PWM_CHANNEL_1, 100);  // Detener
+    dist_1 =  encoder_1_ticks * 2 * 3.1416 * radio_rueda / (506);
+    dist_2 =  encoder_2_ticks * 2 * 3.1416 * radio_rueda / (506);
+    theta = calcular_angulo_giro(dist_1,dist_2);
+      
+    if (theta >= abs(angulo_giro)){
+      ledcWrite(PWM_CHANNEL_0, 0);  // Detener
+      ledcWrite(PWM_CHANNEL_1, 0);  // Detener
+      return true;
+    }
+  } 
+}
+
+
+
+void Control_PID(float actual_theta){
+  float error = actual_theta;
 
   float P = kp * error;
   float I = I + ki * error;
@@ -196,9 +247,6 @@ void Control_PID(float actual_theta,float theta_deseado){
 
   float velocidad_1 = map(abs(velocidad_base + salida_control), 0,MAX_GPS, 0, 255); //IZQUIRDA
   float velocidad_2 = map(abs(velocidad_base - salida_control), 0,MAX_GPS, 0, 255); //DERECHA
-
-  ledcWrite(PWM_CHANNEL_0, 0);
-  ledcWrite(PWM_CHANNEL_1, 0);
   
   if ((velocidad_base + salida_control) < 0){
     digitalWrite(MOTOR_DIR_PIN_1,LOW);
@@ -314,9 +362,13 @@ void subscription_angulo_deseado_callback(const void *msgin){
   delay(100);
   digitalWrite(LED_PIN, LOW);
   const std_msgs__msg__Int32 *msg = (const std_msgs__msg__Int32 *)msgin;
-  angulo_deseado_pid = (msg->data)*3.14/180;
-  Serial.print("Se Cambio el angulo deseado del PID: ");
-  Serial.println(angulo_deseado_pid);
+  angulo_correccion = (msg->data)*3.14/180;
+  Girar(angulo_correccion);
+  encoder_1_ticks =  0;
+  encoder_2_ticks =  0;
+  theta = 0;
+  Serial.print("Se Cambio el angulo de correcion: ");
+  Serial.println(angulo_correccion);
 }
 
 void subscription_coordenadas_deseadas_callback(const void * msgin){
@@ -359,9 +411,9 @@ void leer_sensores(float *distancias) {
 
 void setup() {
   Serial.begin(115200);
-  //set_microros_wifi_transports("Flia Martinez", "nomeacuerdo@", "192.168.100.175", 8888);
+  set_microros_wifi_transports("Flia Martinez", "nomeacuerdo@", "192.168.100.175", 8888);
   //set_microros_wifi_transports("FIUNA", "fiuna#2024", "172.16.245.144", 8888);
-  set_microros_wifi_transports("PROFESORES", "profeFIUNA#2024", "192.168.205.168", 8888);
+  //set_microros_wifi_transports("PROFESORES", "profeFIUNA#2024", "192.168.205.168", 8888);
 
   //Configuracion de direccion de motores
   pinMode(MOTOR_DIR_PIN_1, OUTPUT);
@@ -376,11 +428,13 @@ void setup() {
   // Configuración del encoder 1
   pinMode(ENCODER_PIN_A_1, INPUT);
   pinMode(ENCODER_PIN_B_1, INPUT);
-  attachInterrupt(digitalPinToInterrupt(ENCODER_PIN_A_1), encoder_1_isr, RISING);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_PIN_A_1), encoder_1A_isr, RISING);
+  //attachInterrupt(digitalPinToInterrupt(ENCODER_PIN_B_1), encoder_1B_isr, RISING);
   // Configuración del encoder 1
   pinMode(ENCODER_PIN_A_2, INPUT);
   pinMode(ENCODER_PIN_B_2, INPUT);
-  attachInterrupt(digitalPinToInterrupt(ENCODER_PIN_B_2), encoder_2_isr, RISING);
+  attachInterrupt(digitalPinToInterrupt(ENCODER_PIN_A_2), encoder_2A_isr, RISING);
+  //attachInterrupt(digitalPinToInterrupt(ENCODER_PIN_B_2), encoder_2B_isr, RISING);
 
 
   // Configuracion de los Sensores Ultrasonicos
@@ -546,21 +600,26 @@ void loop() {
   if (state == 1){
     if (millis() - time_request_coord >= 3000){
       state = 0;
-    }else if (X_coord != 100000 && Y_coord != 100000){
+    }
+    if (X_coord != 100000 && Y_coord != 100000){
       if (X_coord != last_X_coord || Y_coord != last_Y_coord){
-      last_X_coord = X_coord;
-      last_Y_coord = Y_coord;
-      dist_1_h = 0;
-      dist_2_h = 0;
-      state = 2;
+        Serial.print(X_coord);
+        Serial.print(", ");
+        Serial.println(Y_coord);
+        last_X_coord = X_coord;
+        last_Y_coord = Y_coord;
+        dist_1_h = 0;
+        dist_2_h = 0;
+        state = 2;
       }
     }
     Serial.println("Esperando Coordenada");
-    Serial.print(X_actual_coord);
-    Serial.print(", ");
-    Serial.print(Y_actual_coord);
-    Serial.print(", ");
-    Serial.println(theta*180/3.14);
+    // Serial.print(angulo_deseado_pid);
+    // Serial.print(", ");
+    // Serial.print(theta*180/3.14);
+    // Serial.print(", ");
+    // Serial.println(angulo_giro);
+    
     RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100)));
   }
   if (state == 2){
@@ -571,24 +630,73 @@ void loop() {
       }else{
         angulo_deseado_pid = 3.14;
       }
+      //Serial.print(Y_coord - Y_actual_coord);
     }else{
-      float m = (X_coord - X_actual_coord) / (Y_coord - Y_actual_coord);
-      if (m <= 0.0001){ //aproximadamente cero
+      float m = (Y_coord - Y_actual_coord) / (X_coord - X_actual_coord);
+      if (abs(m) <= 0.0001){ //aproximadamente cero
         if (Y_coord > Y_actual_coord){
           angulo_deseado_pid = 3.14/2;
+          //Serial.println("44444444444444444444444");
         }else{
           angulo_deseado_pid = -3.14/2;
+          //Serial.println("555555555555555555555");
         }
       }else{
         angulo_deseado_pid = atan(m);
+        if (angulo_deseado_pid < 0){
+          if ((Y_coord - Y_actual_coord) < 0){
+            angulo_deseado_pid = angulo_deseado_pid;
+            //Serial.println("11111111111111111111");
+          }else{
+            angulo_deseado_pid = angulo_deseado_pid + 3.14;
+            //Serial.println("222222222222222222");
+          }
+        }else{
+          if ((Y_coord - Y_actual_coord) < 0){
+            angulo_deseado_pid = angulo_deseado_pid - 3.14;
+            //Serial.println("333333333333333333");
+          }
+          //Serial.println("666666666666666666666666");
+        }
       }
     }
+    //delay(3000);
+    angulo_giro = angulo_deseado_pid - angulo_anterior;
+    angulo_anterior = angulo_deseado_pid;
     //Serial.println(angulo_deseado_pid);
     //delay(3000);
     h = sqrt(pow(X_coord - X_actual_coord,2) + pow(Y_coord - Y_actual_coord,2));
     state = 3;
+    //velocidad_base = 0;
   }
   if (state == 3){
+    // if (angulo_giro > 0){
+    //   digitalWrite(MOTOR_DIR_PIN_1,LOW);
+    //   digitalWrite(MOTOR_DIR_PIN_2,HIGH);
+    // }else{
+    //   digitalWrite(MOTOR_DIR_PIN_1,HIGH);
+    //   digitalWrite(MOTOR_DIR_PIN_2,LOW);
+    // }
+    // ledcWrite(PWM_CHANNEL_0, 100);  // Detener
+    // ledcWrite(PWM_CHANNEL_1, 100);  // Detener
+    // dist_1 =  encoder_1_ticks * 2 * 3.1416 * radio_rueda / (506);
+    // dist_2 =  encoder_2_ticks * 2 * 3.1416 * radio_rueda / (506);
+    // theta = calcular_angulo_giro(dist_1,dist_2);
+    
+    // if (theta >= abs(angulo_giro)){
+    //   ledcWrite(PWM_CHANNEL_0, 0);  // Detener
+    //   ledcWrite(PWM_CHANNEL_1, 0);  // Detener
+    if (Girar(angulo_giro) == true){
+      state = 4;
+      encoder_1_ticks =  0;
+      encoder_2_ticks =  0;
+      theta = 0;
+      X_coord = 100000;
+      Y_coord = 100000;
+    }
+
+  }
+  if (state == 4){
     if (millis() - last_time_pid >= sample_time){
       //deshabilitar executor para que funcione bien el PID
       dist_1 =  encoder_1_ticks * 2 * 3.1416 * radio_rueda / (506);
@@ -596,38 +704,30 @@ void loop() {
       gps_speed_1 = ((encoder_1_ticks - last_1_ticks) * 1000 * 360) / (50 * 506);
       gps_speed_2 = ((encoder_2_ticks - last_2_ticks) * 1000 * 360) / (50 * 506);
       theta = calcular_angulo(dist_1,dist_2);
-      Control_PID(theta,angulo_deseado_pid);
+      Control_PID(theta);
       last_time_pid = millis();
       last_1_ticks = encoder_1_ticks;
       last_2_ticks = encoder_2_ticks;
     }
-    
-    dist_1_h =  (encoder_1_ticks - last_1_h) * 2 * 3.1416 * radio_rueda / (506);
-    dist_2_h =  (encoder_2_ticks - last_2_h) * 2 * 3.1416 * radio_rueda / (506);
-    relative_X_coord = (dist_1_h + dist_2_h)*cos(theta)/2;
-    relative_Y_coord = (dist_1_h + dist_2_h)*sin(theta)/2;
-    //X_actual_coord = (dist_1_h + dist_2_h)*cos(theta)/2;
-    //Y_actual_coord = (dist_1_h + dist_2_h)*sin(theta)/2;
-    Serial.print(X_actual_coord);
-    Serial.print(", ");
-    Serial.print(Y_actual_coord);
-    Serial.print(", ");
-    Serial.print(relative_X_coord);
-    Serial.print(", ");
-    Serial.print(relative_Y_coord);
-    Serial.print(", ");
-    Serial.println(angulo_deseado_pid);
-    //if ((dist_1_h - h) <= 0.01 && (dist_2_h - h) <= 0.01){ //Por chatgpt
-    if (dist_1_h >= h && dist_2_h >= h){
+    relative_X_coord = (dist_1 + dist_2)*cos(angulo_deseado_pid)/2;
+    relative_Y_coord = (dist_1 + dist_2)*sin(angulo_deseado_pid)/2;
+    if (dist_1 >= h && dist_2 >= h){
       ledcWrite(PWM_CHANNEL_0, 0);  // Detener
       ledcWrite(PWM_CHANNEL_1, 0);  // Detener
       X_coord = 100000;
       Y_coord = 100000;
+      theta = 0;
       last_1_h = encoder_1_ticks;
       last_2_h = encoder_2_ticks;
+      encoder_1_ticks = 0;
+      encoder_2_ticks = 0;
       h = 0;
       X_actual_coord = X_actual_coord + relative_X_coord;
       Y_actual_coord = Y_actual_coord + relative_Y_coord;
+      // Serial.print(X_actual_coord);
+      // Serial.print(", ");
+      // Serial.println(X_actual_coord);
+      // delay(5000);
       state = 0;
     }
     //Serial.println("Avanzando");
@@ -638,19 +738,6 @@ void loop() {
       //PEDIR TRAYECTORIA NUEVA
       //state = 1;
   }
-
-  // if (millis() - last_time_pid >= sample_time){
-  //   dist_1 =  encoder_1_ticks * 2 * 3.1416 * radio_rueda / (506);
-  //   dist_2 =  encoder_2_ticks * 2 * 3.1416 * radio_rueda / (506);
-  //   gps_speed_1 = ((encoder_1_ticks - last_1_ticks) * 1000 * 360) / (50 * 506);
-  //   gps_speed_2 = ((encoder_2_ticks - last_2_ticks) * 1000 * 360) / (50 * 506);
-  //   theta = calcular_angulo(dist_1,dist_2);
-  //   Control_PID(theta,angulo_deseado_pid);
-  //   last_time_pid = millis();
-  //   last_1_ticks = encoder_1_ticks;
-  //   last_2_ticks = encoder_2_ticks;
-  // }
-
   //delay(100);
   //RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(50))); //desconentar para ejecutar suscriptores
 }

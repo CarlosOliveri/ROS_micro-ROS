@@ -4,9 +4,9 @@ from rclpy.node import Node
 from std_srvs.srv import Trigger
 import json
 
-class FrameAnalysisClient(Node):
+class FrameAnalysisClient_2(Node):
     def __init__(self):
-        super().__init__('frame_analysis_client')
+        super().__init__('frame_analysis_client_2')
         self.client = self.create_client(Trigger, 'analyze_frame')
         
         while not self.client.wait_for_service(timeout_sec=1.0):
@@ -22,7 +22,7 @@ class FrameAnalysisClient(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = FrameAnalysisClient()
+    node = FrameAnalysisClient_2()
     response = node.send_request()
     if response.success:
         node.get_logger().info('Análisis completado: ')

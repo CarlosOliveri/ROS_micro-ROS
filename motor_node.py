@@ -5,13 +5,22 @@ from std_msgs.msg import Int32  # Cambiamos de Float32 a Int32
 from std_msgs.msg import Int32MultiArray
 from std_msgs.msg import Float32MultiArray
 from std_srvs.srv import Trigger
+import json
+import time
 
 
 class MotorNode(Node):
     def __init__(self):
         super().__init__('motor_node')
+        self.client = self.create_client(Trigger, 'analyze_frame')
 
-        self.client = self.create_client(Trigger, 'analize_frame')
+        while not self.client.wait_for_service(timeout_sec=5.0):
+            self.get_logger().info('Esperando al servicio de análisis de frame...')
+
+        self.get_logger().info('Conectado con el servidor')
+
+        self.request = Trigger.Request()
+        self.response = None
 
         # Crear suscripciones
         self.create_subscription(
@@ -110,6 +119,27 @@ class MotorNode(Node):
         self.point = 0
 
     ################### CALLBACKS  ##########################
+    def send_request(self):
+        self.future = self.client.call_async(self.request)
+        self.future.add_done_callback(self.handle_response)
+        #rclpy.spin_until_future_complete(self, self.future)
+        #return self.future.result()
+    
+    def handle_response(self, future):
+        try:
+            response = future.result()
+            if response.success:
+                self.point = 0
+                response_json = response.message
+                response_data = json.loads(response_json)
+                self.trayectoria = response_data["tray"]
+                self.get_logger().info('Respuesta recibida: ' + str(self.trayectoria))
+                self.enviar_coordenada()
+            else:
+                self.get_logger().info('El servicio respondió con un fallo.')
+        except Exception as e:
+            self.get_logger().error(f'Error al recibir la respuesta del servicio: {str(e)}')
+
     def motor_speed_callback_1(self, msg):
         # Ahora recibimos un Int32
         self.get_logger().info(f'Current motor speed 1: {msg.data} rad/min')
@@ -169,17 +199,20 @@ class MotorNode(Node):
         self.publish_coord_deseada()
 
     def coord_request_callback(self,msg):
+        #self.trayectoria = [[-0.6,0.6],[0.0,0.0],[1.0,0.0]] #para rueba
         if (msg.data == 0):
-            self.trayectoria = [[2,3],[4,5],[6,7]] #para rueba
             try:
-                self.coordenadas = [self.trayectoria[self.point][0],self.trayectoria[self.point][1]]
-                self.point = self.point + 1
-                self.publish_coord_deseada()
+                self.enviar_coordenada()
             except:
-                pass
+                self.send_request()    
         elif (msg.data == 1):
-            self.publish_trayectoria_request()
-            pass
+            self.send_request()
+
+    def enviar_coordenada(self):
+        self.coordenadas = [self.trayectoria[self.point][0],self.trayectoria[self.point][1]]
+        self.point = self.point + 1
+        self.publish_coord_deseada()
+        self.get_logger().info('Se envio')
 
     #################### PUBLISHERS #######################
 
