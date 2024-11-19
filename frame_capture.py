@@ -12,14 +12,16 @@ from std_msgs.msg import Int32MultiArray
 from .grafo import Grafo, Nodo
 from std_srvs.srv import Trigger  # Servicio de ejemplo que no requiere parámetros
 import json
+import os
+print(f"Directorio de trabajo actual: {os.getcwd()}")
 
 #CONSTANTES DE INTERES
-proporcion_x = 0.7535 
-proporcion_y = 0.4557
-altura_camara = 0.27 #metros este parametro hay que verificar al momento de implementar
+proporcion_x = 1.16
+proporcion_y = 0.5
+altura_camara = 3 #metros este parametro hay que verificar al momento de implementar
 W_m = 2 * altura_camara * proporcion_x #metros
 H_m = 2 * altura_camara * proporcion_y #metros
-lado_robot = 0.025 #metros
+lado_robot = 0.22 #metros
 W = 1280 #Corresponde a X cm
 H = 720 #Corresponde a Y cm
 num_div_x = int(W_m/lado_robot) # este numero debe ser igual a la proporcion entre la altura del frame y la altura del robot
@@ -31,21 +33,21 @@ nh = int(H/num_div_y)
 detection = cv2.createBackgroundSubtractorMOG2(history=10000,varThreshold=12)
 
 #limites de la meta
-lower_green = np.array([40, 100, 100],np.uint8)# meta => verde
-upper_green = np.array([100, 255, 255],np.uint8)
+lower_green = np.array([45, 200, 200],np.uint8)# meta => verde
+upper_green = np.array([70, 255, 255],np.uint8)
 #Limites de la Caja
-lower_yellow = np.array([20, 100, 100],np.uint8)#Caja => yellow
-upper_yellow = np.array([30, 255, 255],np.uint8)
+lower_yellow = np.array([27, 200, 200],np.uint8)#Caja => yellow
+upper_yellow = np.array([33, 255, 255],np.uint8)
 #Limite del robot
-blueBajo = np.array([100,100,50],np.uint8)
-blueAlto = np.array([140,255,100],np.uint8)
+blueBajo = np.array([105,150,200],np.uint8)
+blueAlto = np.array([130,255,255],np.uint8)
 #Limite de los obstaculos
-obstBajo = np.array([160,150,20],np.uint8) # obstaculos => rojo
+obstBajo = np.array([165,27,150],np.uint8) # obstaculos => rojo
 obstAlto = np.array([180,255,255],np.uint8)
 
 #Enlace al servidor RTSP de la marca Dahua
-PASS = "12345"#input("Ingrese la Contraseña Administador del dispositivo: ")
-IP = "192.168.100.64"#input("Ingrese la direccion IP: ")
+PASS = "pass1234"#input("Ingrese la Contraseña Administador del dispositivo: ")
+IP = "192.168.1.64"#input("Ingrese la direccion IP: ")
 CH = "1"#input("Ingrese el numero del canal: ")
 #URL = "rtsp://admin:"+PASS+"@"+IP+":554/cam/realmonitor?channel="+CH+"&subtype=0"
 URL = "rtsp://admin:"+PASS+"@"+IP+":554/Streaming/Channels/"+CH+"01"
@@ -79,6 +81,18 @@ nivel_verde = 5
 nivel_azul = 0
 nivel_constraste = 1.1
 
+#try:
+CAMERA_MATRIX = np.load("camera_matrix.npy")
+DIST_COEFFS = np.load("dist_coeffs.npy")
+print("Parámetros cargados exitosamente.")
+#except FileNotFoundError as e:
+    #print("Error: No se encontraron los archivos de calibración.")
+    #print("Por favor, realiza la calibración para generar los archivos necesarios.")
+    #exit(1)
+new_camera_matrix, roi = cv2.getOptimalNewCameraMatrix(
+        CAMERA_MATRIX, DIST_COEFFS, (250, 250), 1, (250, 250)
+    )
+
 class FrameAnalysisService(Node):
     def __init__(self):
         super().__init__('frame_analysis_service')
@@ -94,8 +108,18 @@ class FrameAnalysisService(Node):
             ret, frame = self.capture.read()
 
         if ret:
-            frame = cv2.blur(frame, (5, 5)) #descomentar
+            frame = cv2.undistort(frame,CAMERA_MATRIX,DIST_COEFFS)
+            #frame = cv2.blur(frame, (5, 5)) #descomentar
             # Factor de escala
+            """ recorte_izquierda = 250  # Número de píxeles a eliminar del lado izquierdo
+            recorte_derecha = 250    # Número de píxeles a eliminar del lado derecho
+    
+            # Obtener el ancho original de la imagen
+            alto, ancho, _ = frame.shape
+    
+            # Recortar la imagen en los laterales
+            frame = frame[:, recorte_izquierda:(ancho - recorte_derecha)]
+         """
             scale_factor = 0.9  # Redimensiona al 50% del tamaño original
 
             # Obtener el nuevo tamaño
@@ -105,7 +129,7 @@ class FrameAnalysisService(Node):
             # Redimensionar la imagen
             frame = cv2.resize(frame, (new_width, new_height))
 
-            frame = ajustar_brillo(frame,nivel_rojo,nivel_verde,nivel_azul,nivel_constraste)
+            #frame = ajustar_brillo(frame,nivel_rojo,nivel_verde,nivel_azul,nivel_constraste)
             # Procesamiento del frame (similar a tu código original)
             frame_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
             maskGreen = cv2.inRange(frame_hsv,lower_green,upper_green)
@@ -230,14 +254,23 @@ class FrameAnalysisService(Node):
             if near_nodo_robot == False:
                 print("no se encontro nodo cercano")
                 response.success = False
-                response.result = json.dumps({"error": "No se encontró trayectoria válida"})
+                response.message = json.dumps({"error": "No se encontró trayectoria válida"})
+                while True:
+                    cv2.imshow("Objetos Encontrados",frame)
+                    t = cv2.waitKey(1)
+                    if t & 0xFF == ord('t'):
+                        break
+                self.capture.release()
+                cv2.destroyAllWindows()
                 return response
             else:
+                frame = g1.mostrarGrafos(frame)
                 tray_nodos = g1.menor_trayecto(near_nodo_robot,robot_cero_node,meta_node,frame)
                 if tray_nodos == False:
                     print("no se encontro trayectoria valida")
                     response.success = False
                     response.message = json.dumps({"error": "No se encontró trayectoria válida"})
+                    self.get_logger().info("No se genero la trayectoria")
                     while True:
                         cv2.imshow("Objetos Encontrados",frame)
                         t = cv2.waitKey(1)
@@ -252,8 +285,16 @@ class FrameAnalysisService(Node):
                         aux = [0,0]
                         aux[0] = k.clave[0]*lado_robot/nw
                         aux[1] = k.clave[1]*lado_robot/nh    
-                        tray.append(aux)
+                        tray.append(aux) 
                     #tray = [(640, 400), (720, 400), (800, 400), (800, 480)]  # Ejemplo real
+                    self.get_logger().info("Se genero la trayectoria")
+                    while True:
+                        cv2.imshow("Objetos Encontrados",frame)
+                        t = cv2.waitKey(1)
+                        if t & 0xFF == ord('t'):
+                            break
+                    self.capture.release()
+                    cv2.destroyAllWindows()
                     response.success = True
                     response.message = json.dumps({"tray": tray})
             """ while True:

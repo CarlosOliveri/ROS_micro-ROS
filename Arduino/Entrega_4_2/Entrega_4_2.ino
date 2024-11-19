@@ -35,7 +35,7 @@
 #define TRIG_PIN_2 27
 #define ECHO_PIN_2 35
 
-//Pines de los Sensores Ultrasonicos 3
+//Pines de los Sensores Ultrasonicos 3 Sensor Frontal
 #define TRIG_PIN_3 2
 #define ECHO_PIN_3 15
 
@@ -213,15 +213,15 @@ float calcular_angulo_giro(float dist_1,float dist_2 ){
 
 bool Girar(float angulo_giro){
   while (true){
-    if (angulo_giro > 0){
+    if (angulo_giro < 0){
       digitalWrite(MOTOR_DIR_PIN_1,LOW);
       digitalWrite(MOTOR_DIR_PIN_2,HIGH);
     }else{
       digitalWrite(MOTOR_DIR_PIN_1,HIGH);
       digitalWrite(MOTOR_DIR_PIN_2,LOW);
     }
-    ledcWrite(PWM_CHANNEL_0, 100);  // Detener
-    ledcWrite(PWM_CHANNEL_1, 100);  // Detener
+    ledcWrite(PWM_CHANNEL_0, 100);  
+    ledcWrite(PWM_CHANNEL_1, 100);  
     dist_1 =  encoder_1_ticks * 2 * 3.1416 * radio_rueda / (506);
     dist_2 =  encoder_2_ticks * 2 * 3.1416 * radio_rueda / (506);
     theta = calcular_angulo_giro(dist_1,dist_2);
@@ -246,7 +246,7 @@ void Control_PID(float actual_theta){
   float salida_control = P + I + D;
 
   float velocidad_1 = map(abs(velocidad_base + salida_control), 0,MAX_GPS, 0, 255); //IZQUIRDA
-  float velocidad_2 = map(abs(velocidad_base - salida_control), 0,MAX_GPS, 0, 255); //DERECHA
+  float velocidad_2 = map(abs(velocidad_base + 30 - salida_control), 0,MAX_GPS, 0, 255); //DERECHA
   
   if ((velocidad_base + salida_control) < 0){
     digitalWrite(MOTOR_DIR_PIN_1,LOW);
@@ -411,10 +411,10 @@ void leer_sensores(float *distancias) {
 
 void setup() {
   Serial.begin(115200);
-  set_microros_wifi_transports("Flia Martinez", "nomeacuerdo@", "192.168.100.175", 8888);
+  //set_microros_wifi_transports("Flia Martinez", "nomeacuerdo@", "192.168.100.175", 8888);
   //set_microros_wifi_transports("FIUNA", "fiuna#2024", "172.16.245.144", 8888);
   //set_microros_wifi_transports("PROFESORES", "profeFIUNA#2024", "192.168.205.168", 8888);
-
+  set_microros_wifi_transports("WIFI CORVI", "corvalan", "192.168.1.99", 8888);
   //Configuracion de direccion de motores
   pinMode(MOTOR_DIR_PIN_1, OUTPUT);
   digitalWrite(MOTOR_DIR_PIN_1, HIGH);
@@ -550,8 +550,8 @@ void setup() {
   pid_msg.data.size = 5;  // Tamaño del array
   pid_msg.data.capacity = 5;
   pid_msg.data.data = (int32_t *)malloc(5 * sizeof(int32_t));
+  request_coord_msg.data = 1;
 }
-
 void loop() {
   if (Debug == true){
     if (millis() - last_wait_time >= wait_time){
@@ -591,26 +591,38 @@ void loop() {
   //Serial.print("Enviando paquetes ...");
   if (state == 0){
     //Coordenada Request
-    request_coord_msg.data = 0;
     RCSOFTCHECK(rcl_publish(&coord_request_publisher, &request_coord_msg, NULL))
     state = 1;
     time_request_coord = millis();
     Serial.println("Solicitud de Coordenada");
   }
   if (state == 1){
-    if (millis() - time_request_coord >= 3000){
+    if (millis() - time_request_coord >= 7000){
       state = 0;
     }
     if (X_coord != 100000 && Y_coord != 100000){
       if (X_coord != last_X_coord || Y_coord != last_Y_coord){
-        Serial.print(X_coord);
-        Serial.print(", ");
-        Serial.println(Y_coord);
-        last_X_coord = X_coord;
-        last_Y_coord = Y_coord;
-        dist_1_h = 0;
-        dist_2_h = 0;
-        state = 2;
+        //Serial.print(X_coord);
+        //Serial.print(", ");
+        //Serial.println(Y_coord);
+        if (request_coord_msg.data == 0){
+          Serial.print("Nueva coordenada Recibida");
+          last_X_coord = X_coord;
+          last_Y_coord = Y_coord;
+          dist_1_h = 0;
+          dist_2_h = 0;
+          state = 2;
+        }else{
+          Serial.print("Posicion Actual seteada");
+          request_coord_msg.data = 0;
+          state = 0;
+          X_actual_coord = X_coord;
+          Y_actual_coord = Y_coord;
+          last_X_coord = X_coord;
+          last_Y_coord = Y_coord;
+          X_coord = 100000;
+          Y_coord = 100000;
+        }
       }
     }
     Serial.println("Esperando Coordenada");
@@ -663,9 +675,9 @@ void loop() {
     //delay(3000);
     angulo_giro = angulo_deseado_pid - angulo_anterior;
     angulo_anterior = angulo_deseado_pid;
-    //Serial.println(angulo_deseado_pid);
+    Serial.println(angulo_giro);
     //delay(3000);
-    h = sqrt(pow(X_coord - X_actual_coord,2) + pow(Y_coord - Y_actual_coord,2));
+    h = sqrt(pow(X_coord - X_actual_coord,2) + pow((Y_coord - Y_actual_coord),2));
     state = 3;
     //velocidad_base = 0;
   }
@@ -691,8 +703,8 @@ void loop() {
       encoder_1_ticks =  0;
       encoder_2_ticks =  0;
       theta = 0;
-      X_coord = 100000;
-      Y_coord = 100000;
+      //X_coord = 100000;
+      //Y_coord = 100000;
     }
 
   }
@@ -711,23 +723,39 @@ void loop() {
     }
     relative_X_coord = (dist_1 + dist_2)*cos(angulo_deseado_pid)/2;
     relative_Y_coord = (dist_1 + dist_2)*sin(angulo_deseado_pid)/2;
-    if (dist_1 >= h && dist_2 >= h){
+    Serial.println(angulo_giro);
+    //distancias[0] = leer_distancia(TRIG_PIN_1, ECHO_PIN_1);  // Sensor 1
+    //distancias[1] = leer_distancia(TRIG_PIN_2, ECHO_PIN_2);  // Sensor 2
+    //distancias[2] = leer_distancia(TRIG_PIN_3, ECHO_PIN_3);  // Sensor 3
+    distancias[2] = 30;
+    if (distancias[2] <= 20){
       ledcWrite(PWM_CHANNEL_0, 0);  // Detener
       ledcWrite(PWM_CHANNEL_1, 0);  // Detener
-      X_coord = 100000;
-      Y_coord = 100000;
+      if(Girar(3.14/2) == true){
+        state = 0; //SOLICITAMOS NUEVA TRAYECTORIA
+        request_coord_msg.data = 1;
+      }
+    }else{
+      request_coord_msg.data = 0;
+    }
+
+    if (dist_1 >= h*1.1 && dist_2 >= h*1.1){
+      ledcWrite(PWM_CHANNEL_0, 0);  // Detener
+      ledcWrite(PWM_CHANNEL_1, 0);  // Detener
       theta = 0;
       last_1_h = encoder_1_ticks;
       last_2_h = encoder_2_ticks;
       encoder_1_ticks = 0;
       encoder_2_ticks = 0;
       h = 0;
-      X_actual_coord = X_actual_coord + relative_X_coord;
-      Y_actual_coord = Y_actual_coord + relative_Y_coord;
-      // Serial.print(X_actual_coord);
-      // Serial.print(", ");
-      // Serial.println(X_actual_coord);
-      // delay(5000);
+      X_actual_coord = X_coord;
+      Y_actual_coord = Y_coord;
+      X_coord = 100000;
+      Y_coord = 100000;
+      Serial.print(X_actual_coord);
+      Serial.print(", ");
+      Serial.println(X_actual_coord);
+      //delay(5000);
       state = 0;
     }
     //Serial.println("Avanzando");

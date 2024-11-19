@@ -3,12 +3,12 @@ import cv2
 import time
 
 #CONSTANTES DE INTERES
-proporcion_x = 0.7535 
-proporcion_y = 0.4557
-altura_camara = 0.27 #metros este parametro hay que verificar al momento de implementar
+proporcion_x = 1.16
+proporcion_y = 0.5
+altura_camara = 3 #metros este parametro hay que verificar al momento de implementar
 W_m = 2 * altura_camara * proporcion_x #metros
 H_m = 2 * altura_camara * proporcion_y #metros
-lado_robot = 0.025 #metros
+lado_robot = 0.22 #metros
 W = 1280 #Corresponde a X cm
 H = 720 #Corresponde a Y cm
 num_div_x = int(W_m/lado_robot) # este numero debe ser igual a la proporcion entre la altura del frame y la altura del robot
@@ -25,7 +25,7 @@ class Nodo:
     self.color = "blanco"
 
 def distancia_entre_coord(a,b):
-  dist_min = math.sqrt(nw**2 + nh**2)/1.8
+  dist_min = math.sqrt(nw**2 + nh**2)/2.5
   distancia = math.sqrt((a[0]-b.clave[0])**2 + (a[1]-b.clave[1])**2)
   if distancia >= dist_min:
      distancia = math.sqrt((a[0]+ a[2]-b.clave[0])**2 + (a[1] -b.clave[1])**2)
@@ -47,8 +47,8 @@ class Grafo:
     es_apto = True
     for k in elementos_obstaculos:
       if distancia_entre_coord(k,vertice):
-        if vertice.clave[0] < (k[0] + k[2]) and (vertice.clave[0] + nw) > k[0]:
-          if vertice.clave[1] < (k[1] + k[3]) and (vertice.clave[1] + nh) > k[1]:
+        if vertice.clave[0] < (k[0] + k[2]) and (vertice.clave[0]) > k[0]:
+          if vertice.clave[1] < (k[1] + k[3]) and (vertice.clave[1]) > k[1]:
             es_apto = False
       else:
         es_apto = False
@@ -70,7 +70,7 @@ class Grafo:
     #img = 255*np.ones((H,W,3),dtype=np.uint8)
     for k in self.vertices:
       cv2.line(frame,(k.clave[0],k.clave[1]),(k.clave[0],k.clave[1]),(255, 0, 0), 10)
-      return frame
+    return frame
 
   def menor_trayecto(self,pos,robot_cero_node,meta_node,frame):
     actual_dist = pos.dist

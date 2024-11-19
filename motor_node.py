@@ -201,18 +201,18 @@ class MotorNode(Node):
     def coord_request_callback(self,msg):
         #self.trayectoria = [[-0.6,0.6],[0.0,0.0],[1.0,0.0]] #para rueba
         if (msg.data == 0):
-            try:
-                self.enviar_coordenada()
-            except:
-                self.send_request()    
+            self.enviar_coordenada()   
         elif (msg.data == 1):
             self.send_request()
 
     def enviar_coordenada(self):
-        self.coordenadas = [self.trayectoria[self.point][0],self.trayectoria[self.point][1]]
-        self.point = self.point + 1
-        self.publish_coord_deseada()
-        self.get_logger().info('Se envio')
+        if self.point < len(self.trayectoria) and len(self.trayectoria) != 0:
+            self.coordenadas = [self.trayectoria[self.point][0],self.trayectoria[self.point][1]]
+            self.point = self.point + 1
+            self.publish_coord_deseada()
+            self.get_logger().info('Se envio')
+        else:
+            self.get_logger().info('Destino alcanzado')
 
     #################### PUBLISHERS #######################
 

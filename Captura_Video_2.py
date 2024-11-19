@@ -8,10 +8,10 @@ import time
 #CONSTANTES DE INTERES
 proporcion_x = 0.7535 
 proporcion_y = 0.4557
-altura_camara = 0.27 #metros este parametro hay que verificar al momento de implementar
+altura_camara = 3 #metros este parametro hay que verificar al momento de implementar
 W_m = 2 * altura_camara * proporcion_x #metros
 H_m = 2 * altura_camara * proporcion_y #metros
-lado_robot = 0.025 #metros
+lado_robot = 0.2 #metros
 W = 1280 #Corresponde a X cm
 H = 720 #Corresponde a Y cm
 num_div_x = int(W_m/lado_robot) # este numero debe ser igual a la proporcion entre la altura del frame y la altura del robot
@@ -36,10 +36,12 @@ blueAlto = np.array([140,255,100],np.uint8)
 #Limite de los obstaculos
 obstBajo = np.array([160,150,0],np.uint8) # obstaculos => rojo
 obstAlto = np.array([180,255,255],np.uint8)
+obstBajo = np.array([0,127,75],np.uint8) # obstaculos => rojo
+obstAlto = np.array([127,127,75],np.uint8)
 
 #Enlace al servidor RTSP de la marca Dahua
-PASS = "12345"#input("Ingrese la Contraseña Administador del dispositivo: ")
-IP = "192.168.100.64"#input("Ingrese la direccion IP: ")
+PASS = "pass1234"#input("Ingrese la Contraseña Administador del dispositivo: ")
+IP = "192.168.1.64"#input("Ingrese la direccion IP: ")
 CH = "1"#input("Ingrese el numero del canal: ")
 #URL = "rtsp://admin:"+PASS+"@"+IP+":554/cam/realmonitor?channel="+CH+"&subtype=0"
 URL = "rtsp://admin:"+PASS+"@"+IP+":554/Streaming/Channels/"+CH+"01"
@@ -74,7 +76,7 @@ nivel_azul = 0
 nivel_constraste = 1.1
 
 def distancia_entre_coord(a,b):
-  dist_min = math.sqrt(nw**2 + nh**2)/1.8
+  dist_min = math.sqrt(nw**2 + nh**2)/2.5
   distancia = math.sqrt((a[0]-b.clave[0])**2 + (a[1]-b.clave[1])**2)
   if distancia >= dist_min:
      distancia = math.sqrt((a[0]+ a[2]-b.clave[0])**2 + (a[1] -b.clave[1])**2)
@@ -103,8 +105,8 @@ class Grafo:
     pass
     for k in elementos_obstaculos:
       if distancia_entre_coord(k,vertice):
-        if vertice.clave[0] < (k[0] + k[2]) and (vertice.clave[0] + nw) > k[0]:
-          if vertice.clave[1] < (k[1] + k[3]) and (vertice.clave[1] + nh) > k[1]:
+        if vertice.clave[0] < (k[0] + k[2]) and (vertice.clave[0]) > k[0]:
+          if vertice.clave[1] < (k[1] + k[3]) and (vertice.clave[1]) > k[1]:
             es_apto = False
       else:
         es_apto = False
@@ -166,10 +168,10 @@ class Grafo:
     return self.buscar_vertice(x,y)
 
 while True:
-    #try:
+    try:
         #Recuperamos los frames del video 1 a 1 en cada iteracion
         ret,frame = Capture.read()
-        frame = cv2.blur(frame, (5, 5))
+        #frame = cv2.blur(frame, (5, 5))
         if ret == False:
             print("no se encontro frame")
         #print(frame.shape)
@@ -246,11 +248,7 @@ while True:
           cv2.line(frame,(elementos_obstaculos[j][0],elementos_obstaculos[j][1]+elementos_obstaculos[j][3]),(elementos_obstaculos[j][0]+elementos_obstaculos[j][2],elementos_obstaculos[j][1]+elementos_obstaculos[j][3]),(0, 0, 255), 4)
           cv2.line(frame,(elementos_obstaculos[j][0]+elementos_obstaculos[j][2],elementos_obstaculos[j][1]+elementos_obstaculos[j][3]),(elementos_obstaculos[j][0]+elementos_obstaculos[j][2],elementos_obstaculos[j][1]),(0, 0, 255), 4)
 
-          """ cv2.line(frame,(X_coord[j],Y_coord[j]),(X_coord[j] + W_obst[j],Y_coord[j]),(30, 100, 0), 4)
-          cv2.line(frame,(X_coord[j],Y_coord[j]),(X_coord[j],Y_coord[j] + H_obst[j]),(30, 100, 0), 4)
-          cv2.line(frame,(X_coord[j],Y_coord[j] + H_obst[j]),(X_coord[j] + W_obst[j],Y_coord[j] + H_obst[j]),(30, 100, 0), 4)
-          cv2.line(frame,(X_coord[j] + W_obst[j],Y_coord[j] + H_obst[j]),(X_coord[j] + W_obst[j],Y_coord[j]),(30, 100, 0), 4)
-          """
+         
         #Meta
         cv2.line(frame,(meta_coord[0],meta_coord[1]),(meta_coord[0]+meta_coord[2],meta_coord[1]),(50, 255, 50), 4)
         cv2.line(frame,(meta_coord[0],meta_coord[1]),(meta_coord[0],meta_coord[1]+meta_coord[3]),(50, 255, 50), 4)
@@ -266,11 +264,11 @@ while True:
         cv2.line(frame,(caja_coord[0],caja_coord[1]),(caja_coord[0],caja_coord[1]+caja_coord[3]),(0, 255, 255), 4)
         cv2.line(frame,(caja_coord[0],caja_coord[1]+caja_coord[3]),(caja_coord[0]+caja_coord[2],caja_coord[1]+caja_coord[3]),(0, 255, 255), 4)
         cv2.line(frame,(caja_coord[0]+caja_coord[2],caja_coord[1]),(caja_coord[0]+caja_coord[2],caja_coord[1]+caja_coord[3]),(0, 255, 255), 4)
-
+        
         for k in range(num_div_x):
             cv2.line(frame,(nw*(k+1),0),(nw*(k+1),H),(0, 0, 0), 1)
         for k in range(num_div_y):
-            cv2.line(frame,(0,nh*(k+1)),(W,nh*(k+1)),(0, 0, 0), 1)
+            cv2.line(frame,(0,nh*(k+1)),(W,nh*(k+1)),(0, 0, 0), 1) 
 
         #######################33
         g1 = Grafo() # Se crea el grafo de nodos disponibles para transitar
@@ -307,26 +305,26 @@ while True:
           try_nodo = g1.buscar_vertice(k.clave[0]-nw,k.clave[1]-nh)
           if  try_nodo != False:
               g1.agregar_aristas(k,try_nodo)
-        g1.mostrarGrafos()
+        #g1.mostrarGrafos()
         print("grilla")
         if g1.menor_trayecto(g1.buscar_nodo_cercano(robot_coord)) == False:
-          pass
+          pass  
         #print("Grafo")
         ##########################33
 
         cv2.imshow("Imagen para generar trayectoria",frame)
-        """ cv2.imshow("mascara obstauculos", maskObst)
-        cv2.imshow("mascara rojo", maskRed2)"""
+        #cv2.imshow("mascara obstauculos", maskObst)
+        #cv2.imshow("mascara rojo", maskRed2)
         #cv2.imshow("mascara azul", maskCaja) 
-        t = cv2.waitKey(1)
+        """ t = cv2.waitKey(1)
         if t & 0xFF == ord('t'):
-          break
-        """ except:
+          break """
+    except:
       Capture.open(URL)
       time.sleep(1)  # Pausa para reconectar
       print("falle") 
-    t = cv2.waitKey(1)
-    if t & 0xFF == ord('t'):
-        break"""
+      t = cv2.waitKey(1)
+      if t & 0xFF == ord('t'):
+        break
 Capture.release()
 cv2.destroyAllWindows()

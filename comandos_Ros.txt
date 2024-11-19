@@ -22,7 +22,7 @@ ros2 topic pub /set_motor_speed_1 std_msgs/msg/Int32 "{data: 50}"
 ros2 topic pub /set_motor_speed_2 std_msgs/msg/Int32 "{data: 50}"
 
 ros2 topic pub /set_sample_time std_msgs/msg/Int32 "{data: 5000}"
-ros2 topic pub /set_sample_time std_msgs/msg/Float32MultiArray "{data: [1.0,0.0]}"
+ros2 topic pub /new_coordenadas std_msgs/msg/Float32MultiArray "{data: [1.0,0.0]}"
 
 ros2 run my_robot_controller frame_capture
 ros2 run my_robot_controller frame_client
