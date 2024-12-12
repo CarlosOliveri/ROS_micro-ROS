@@ -38,10 +38,12 @@ obstBajo = np.array([160,150,0],np.uint8) # obstaculos => rojo
 obstAlto = np.array([180,255,255],np.uint8)
 obstBajo = np.array([0,127,75],np.uint8) # obstaculos => rojo
 obstAlto = np.array([127,127,75],np.uint8)
+lower_green = np.array([165,27,150],np.uint8) # obstaculos => rojo
+upper_green = np.array([180,255,255],np.uint8)
 
 #Enlace al servidor RTSP de la marca Dahua
-PASS = "pass1234"#input("Ingrese la Contraseña Administador del dispositivo: ")
-IP = "192.168.1.64"#input("Ingrese la direccion IP: ")
+PASS = "12345"#input("Ingrese la Contraseña Administador del dispositivo: ")
+IP = "192.168.100.64"#input("Ingrese la direccion IP: ")
 CH = "1"#input("Ingrese el numero del canal: ")
 #URL = "rtsp://admin:"+PASS+"@"+IP+":554/cam/realmonitor?channel="+CH+"&subtype=0"
 URL = "rtsp://admin:"+PASS+"@"+IP+":554/Streaming/Channels/"+CH+"01"
@@ -273,8 +275,11 @@ while True:
         #######################33
         g1 = Grafo() # Se crea el grafo de nodos disponibles para transitar
         #Se crean los nodos y se agregan al grafo
-        robot_cero_node = Nodo(robot_coord[0],robot_coord[1])
-        meta_node = Nodo(meta_mean_point[0],meta_mean_point[1])
+        try:
+          robot_cero_node = Nodo(robot_coord[0],robot_coord[1])
+          meta_node = Nodo(meta_mean_point[0],meta_mean_point[1])
+        except:
+          pass
         for k in range(num_div_x):
           for j in range(num_div_y):
             g1.agregar_vertice(Nodo(nw*(k+1),nh*(j+1)))
@@ -305,10 +310,14 @@ while True:
           try_nodo = g1.buscar_vertice(k.clave[0]-nw,k.clave[1]-nh)
           if  try_nodo != False:
               g1.agregar_aristas(k,try_nodo)
-        #g1.mostrarGrafos()
+        g1.mostrarGrafos()
+
         print("grilla")
-        if g1.menor_trayecto(g1.buscar_nodo_cercano(robot_coord)) == False:
-          pass  
+        try:
+          if g1.menor_trayecto(g1.buscar_nodo_cercano(robot_coord)) == False:
+            pass
+        except:
+            pass  
         #print("Grafo")
         ##########################33
 
@@ -319,10 +328,11 @@ while True:
         """ t = cv2.waitKey(1)
         if t & 0xFF == ord('t'):
           break """
-    except:
+    except Exception as e:
       Capture.open(URL)
       time.sleep(1)  # Pausa para reconectar
-      print("falle") 
+      print(e) 
+      cv2.imshow("Imagen para generar trayectoria",frame)
       t = cv2.waitKey(1)
       if t & 0xFF == ord('t'):
         break

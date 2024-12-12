@@ -3,18 +3,18 @@ import cv2
 import time
 
 #CONSTANTES DE INTERES
-proporcion_x = 1.16
+proporcion_x = 0.76732
 proporcion_y = 0.5
 altura_camara = 3 #metros este parametro hay que verificar al momento de implementar
-W_m = 2 * altura_camara * proporcion_x #metros
-H_m = 2 * altura_camara * proporcion_y #metros
+W_m = 2.70 #2 * altura_camara * proporcion_x #metros
+H_m = 2.70 #2 * altura_camara * proporcion_y #metros
 lado_robot = 0.22 #metros
-W = 1280 #Corresponde a X cm
-H = 720 #Corresponde a Y cm
+W = 499 #Corresponde a X cm
+H = 448 #Corresponde a Y cm
 num_div_x = int(W_m/lado_robot) # este numero debe ser igual a la proporcion entre la altura del frame y la altura del robot
-num_div_y = int(H_m/lado_robot) # este numero debe ser igual a la proporcion entre la anchura del frame y la anchura del robot
 nw = int(W/num_div_x)
-nh = int(H/num_div_y)
+nh = nw
+num_div_y = int(H/nw)
 
 class Nodo:
   def __init__(self,x,y):
@@ -95,17 +95,18 @@ class Grafo:
     return min_tray
 
   def buscar_nodo_cercano(self,pos):
-    min_dist_x = 500
-    min_dist_y = 500
+    min_dist_x = 1000
+    min_dist_y = 1000
     x = 0
+    y = 0
     for k in range(num_div_x):
       if min_dist_x > abs(pos[0] - (nw*(k+1))):
-        min_dist_x = pos[0] - (nw*(k+1))
+        min_dist_x = abs(pos[0] - (nw*(k+1)))
         x = nw*(k+1)
         #print(x)
     for k in range(num_div_y):
       if min_dist_y > abs(pos[1] - (nh*(k+1))):
-        min_dist_y = pos[1] - (nh*(k+1))
+        min_dist_y = abs(pos[1] - (nh*(k+1)))
         y = nh*(k+1)
         #print(y)
     return self.buscar_vertice(x,y)

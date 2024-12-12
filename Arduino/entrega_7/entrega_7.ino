@@ -1,5 +1,5 @@
 #include <micro_ros_arduino.h>
-#include <yaml.h>
+//#include <yaml.h>
 
 #include <micro_ros_arduino.h>
 #include <WiFi.h>  // Se añade la librería WiFi
@@ -27,11 +27,11 @@
 #define ENCODER_PIN_A_2 36
 #define ENCODER_PIN_B_2 39
 
-//Pines de los Sensores Ultrasonicos 1
+//Pines de los Sensores Ultrasonicos 1 el de la derecha
 #define TRIG_PIN_1 25
 #define ECHO_PIN_1 34
 
-//Pines de los Sensores Ultrasonicos 2
+//Pines de los Sensores Ultrasonicos 2  el de la izquierda
 #define TRIG_PIN_2 27
 #define ECHO_PIN_2 35
 
@@ -108,9 +108,6 @@ float relative_X_coord = 0;
 float relative_Y_coord = 0;
 float last_X_coord = 0;
 float last_Y_coord = 0;
-int nw = 41; //pixeles por 20cm en x
-int nh = 31;
-
 int state = 0;
 int time_request_coord = 0;
 float dist_1_h = 0;
@@ -123,7 +120,7 @@ float h = 0; //Hipotenusa de triangulo rectangulo
 float error_anterior = 0;//en angulos
 float I = 0; //Termino Integral
 int velocidad_base = 250; //grados/s
-float radio_rueda = 0.0375;
+float radio_rueda = 0.028;
 float dist_base = 0.225;
 int initial_time = 0;
 float gps_speed_1 = 0;
@@ -214,6 +211,32 @@ float calcular_angulo_giro(float dist_1,float dist_2 ){
   return (dist_2 + dist_1) / dist_base;
 }
 
+float leer_distancia(int TRIG_PIN, int ECHO_PIN) {
+  //Lectura de sensores ultrasonicos
+  long duration;
+  float distancia_cm;
+
+  digitalWrite(TRIG_PIN, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+
+  duration = pulseIn(ECHO_PIN, HIGH);
+
+  distancia_cm = (duration * 0.0343 / 2);
+
+  return distancia_cm;
+}
+
+
+void leer_sensores() {
+  //distancias[0] = leer_distancia(TRIG_PIN_1, ECHO_PIN_1);  // Sensor 1
+  //distancias[1] = leer_distancia(TRIG_PIN_2, ECHO_PIN_2);  // Sensor 2
+  distancias[2] = leer_distancia(TRIG_PIN_3, ECHO_PIN_3);  // Sensor 3
+}
+
 bool Girar(float angulo_giro){
   while (true){
     if (angulo_giro < 0){
@@ -237,7 +260,30 @@ bool Girar(float angulo_giro){
   } 
 }
 
+// void function_PID (float error_actual_1,float error_actual_2){
+//   //error_Integral_1 = error_Integral_1 + error_actual_1;
+//   error_diferencial_1 = error_actual_1 - error_anterior_1;
+//   int esfuerzo_1 = int(kp*error_actual_1 + ki*error_integral_1 - kd*error_diferencial_1);
+//   error_anterior_1 = error_actual_1;
 
+//   error_diferencial_2 = error_actual_2 - error_anterior_2;
+//   int esfuerzo_2 = int(kp*error_actual_2 + ki*error_integral_2 - kd*error_diferencial_2);
+//   error_anterior_2 = error_actual_2;
+
+//   int motor_speed_pwm_1 = map(esfuerzo_1 + gps_speed_1,0,MAX_GPS,0,255);
+//   int motor_speed_pwm_2 = map(esfuerzo_2 + gps_speed_2,0,MAX_GPS,0,255);
+  
+//   ledcWrite(PWM_CHANNEL_1, motor_speed_pwm_2);  // Ajustar la señal PWM
+//   ledcWrite(PWM_CHANNEL_0, motor_speed_pwm_1);  // Ajustar la señal PWM
+
+//   Serial.print(esfuerzo_1);
+//   Serial.print(",");
+//   Serial.print(error_actual_1);
+//   Serial.print(",");
+//   Serial.print(gps_speed_1);
+//   Serial.print(",");
+//   Serial.println(encoder_1_ticks);
+// }
 
 void Control_PID(float actual_theta){
   float error = actual_theta;
@@ -249,7 +295,17 @@ void Control_PID(float actual_theta){
   float salida_control = P + I + D;
 
   float velocidad_1 = map(abs(velocidad_base + salida_control), 0,MAX_GPS, 0, 255); //IZQUIRDA
-  float velocidad_2 = map(abs(velocidad_base + 30 - salida_control), 0,MAX_GPS, 0, 255); //DERECHA
+  float velocidad_2 = map(abs(velocidad_base  - salida_control), 0,MAX_GPS, 0, 255); //DERECHA
+
+  leer_sensores();
+  if (distancias[1]<=10){ //izq
+   // float velocidad_1 = map(abs(velocidad_base + salida_control), 0,MAX_GPS, 0, 255); //IZQUIRDA
+    float velocidad_2 = map(abs(velocidad_base + 30 - salida_control + 15*(distancias[2]*10/100)), 0,MAX_GPS, 0, 255); //DERECHA
+  }
+  if (distancias[0]<=10){ //der
+    float velocidad_1 = map(abs(velocidad_base + salida_control + 15*(distancias[1]*10/100) ), 0,MAX_GPS, 0, 255); //IZQUIRDA
+   // float velocidad_2 = map(abs(velocidad_base + 30 - salida_control ), 0,MAX_GPS, 0, 255); //DERECHA
+  }
   
   if ((velocidad_base + salida_control) < 0){
     digitalWrite(MOTOR_DIR_PIN_1,LOW);
@@ -297,6 +353,42 @@ void Control_PID(float actual_theta){
   //Serial.println(theta_deseado);
   error_anterior = error;
   salida_control = 0;
+}
+
+void DetenerMotor(){
+  ledcWrite(PWM_CHANNEL_0, 0);  // Detener
+  ledcWrite(PWM_CHANNEL_1, 0);  // Detener
+}
+
+void EvadirObstaculo(){
+  if(distancias[2]<=10){
+    //Tenemos que retroceder un poco 
+    digitalWrite(MOTOR_DIR_PIN_1,HIGH);
+    digitalWrite(MOTOR_DIR_PIN_2,LOW);
+    ledcWrite(PWM_CHANNEL_0, 100); 
+    ledcWrite(PWM_CHANNEL_1, 100);
+    while(distancias[2]<=10){
+      //Serial.println(distancias[2]);
+      delay(400);
+      leer_sensores();
+    }
+    ledcWrite(PWM_CHANNEL_0, 0); 
+    ledcWrite(PWM_CHANNEL_1, 0);
+  }
+
+  //Giramos hasta que dejar de ver el obstaculo
+  // if(distancias[0]<= 10){
+  //   while(distancias[1]<= 10){
+  //     leer_sensores();
+  //     Girar(-3.14/4);//Gira a la izq
+  //   }
+  // }
+  // else if(distancias[1]<= 10){
+  //     while(distancias[2]<= 10){
+  //       leer_sensores();
+  //       Girar(3.14/4);//Gira a la der
+  //     }
+  // }
 }
 
 // Callback de la suscripción: Ajusta la velocidad del motor
@@ -387,37 +479,12 @@ void subscription_coordenadas_deseadas_callback(const void * msgin){
   Serial.println(Y_coord);
 }
 
-float leer_distancia(int TRIG_PIN, int ECHO_PIN) {
-  //Lectura de sensores ultrasonicos
-  long duration;
-  float distancia_cm;
-
-  digitalWrite(TRIG_PIN, LOW);
-  delayMicroseconds(2);
-
-  digitalWrite(TRIG_PIN, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(TRIG_PIN, LOW);
-
-  duration = pulseIn(ECHO_PIN, HIGH);
-
-  distancia_cm = (duration * 0.0343 / 2);
-
-  return distancia_cm;
-}
-
-void leer_sensores(float *distancias) {
-  distancias[0] = leer_distancia(TRIG_PIN_1, ECHO_PIN_1);  // Sensor 1
-  distancias[1] = leer_distancia(TRIG_PIN_2, ECHO_PIN_2);  // Sensor 2
-  distancias[2] = leer_distancia(TRIG_PIN_3, ECHO_PIN_3);  // Sensor 3
-}
-
 void setup() {
   Serial.begin(115200);
   //set_microros_wifi_transports("Flia Martinez", "nomeacuerdo@", "192.168.100.175", 8888);
-  //set_microros_wifi_transports("FIUNA", "fiuna#2024", "172.16.245.144", 8888);
+  set_microros_wifi_transports("FIUNA", "fiuna#2024", "172.16.245.144", 8888);
   //set_microros_wifi_transports("PROFESORES", "profeFIUNA#2024", "192.168.205.168", 8888);
-  set_microros_wifi_transports("WIFI CORVI", "corvalan", "192.168.1.99", 8888);
+  //set_microros_wifi_transports("WIFI CORVI", "corvalan", "192.168.1.99", 8888);
   //Configuracion de direccion de motores
   pinMode(MOTOR_DIR_PIN_1, OUTPUT);
   digitalWrite(MOTOR_DIR_PIN_1, HIGH);
@@ -556,43 +623,58 @@ void setup() {
   request_coord_msg.data = 1;
 }
 void loop() {
-  // if (Debug == true){
-  //   if (millis() - last_wait_time >= wait_time){
-  //     RCSOFTCHECK(rcl_publish(&pid_debugger_publisher, &pid_msg, NULL));
-  //   }
-  // }
+  if (Debug == true){
+    if (millis() - last_wait_time >= wait_time){
+      RCSOFTCHECK(rcl_publish(&pid_debugger_publisher, &pid_msg, NULL));
+    }
+  }
 
   // if (millis() - ultima_medicion >= tiempo_medicion) {
-  //    leer_sensores(distancias);
-  //    distancias[0] = leer_distancia(TRIG_PIN_1, ECHO_PIN_1);  // Sensor 1
-  //    distancias[1] = leer_distancia(TRIG_PIN_2, ECHO_PIN_2);  // Sensor 2
-  //    distancias[2] = leer_distancia(TRIG_PIN_3, ECHO_PIN_3);  // Sensor 3
-  //    ultima_medicion = millis();
-  //    for (int i = 0; i < 3; i++) {
-  //      ultrasonic_msg.data.data[i] = (int32_t)distancias[i];
-  //    } 
-  //    //RCSOFTCHECK(rcl_publish(&ultrasonic_publisher, &ultrasonic_msg, NULL));
-  //  }
-  //  //Publicar la velocidad actual del motor (basada en el encoder)
-  // unsigned long current_time = millis();
-  // unsigned long elapsed_time = current_time - last_time;
-  // if (elapsed_time >= 1000) {
-  //   // Calcular velocidad en rad/min (ejemplo simple)
-  //   current_speed_1 = (encoder_1_ticks-last_1_ticks) * 360 / (506);  // 20 ticks por revolución, ajusta según tu encoder
-  //   current_speed_2 = (encoder_2_ticks-last_2_ticks) * 360 / (506);
-  //   Serial.println(current_speed_2);
-  //   speed_1_msg.data = (int32_t)current_speed_1;
-  //   speed_2_msg.data = (int32_t)current_speed_2;
-  //   RCSOFTCHECK(rcl_publish(&speed_1_publisher, &speed_1_msg, NULL));
-  //   RCSOFTCHECK(rcl_publish(&speed_2_publisher, &speed_2_msg, NULL));
-  //    //Reiniciar contador de ticks
-  //   last_1_ticks = encoder_1_ticks;
-  //   last_2_ticks = encoder_2_ticks;
-  //   last_time = current_time;
+  //   leer_sensores(distancias);
+  //   distancias[0] = leer_distancia(TRIG_PIN_1, ECHO_PIN_1);  // Sensor 1
+  //   distancias[1] = leer_distancia(TRIG_PIN_2, ECHO_PIN_2);  // Sensor 2
+  //   distancias[2] = leer_distancia(TRIG_PIN_3, ECHO_PIN_3);  // Sensor 3
+  //   ultima_medicion = millis();
+  //   for (int i = 0; i < 3; i++) {
+  //     ultrasonic_msg.data.data[i] = (int32_t)distancias[i];
+  //   } 
+  //   //RCSOFTCHECK(rcl_publish(&ultrasonic_publisher, &ultrasonic_msg, NULL));
   // }
+  // Publicar la velocidad actual del motor (basada en el encoder)
+  /*unsigned long current_time = millis();
+  unsigned long elapsed_time = current_time - last_time;
+  if (elapsed_time >= 1000) {
+    // Calcular velocidad en rad/min (ejemplo simple)
+    current_speed_1 = (encoder_1_ticks-last_1_ticks) * 360 / (506);  // 20 ticks por revolución, ajusta según tu encoder
+    current_speed_2 = (encoder_2_ticks-last_2_ticks) * 360 / (506);
+    Serial.println(current_speed_2);
+    speed_1_msg.data = (int32_t)current_speed_1;
+    speed_2_msg.data = (int32_t)current_speed_2;
+    RCSOFTCHECK(rcl_publish(&speed_1_publisher, &speed_1_msg, NULL));
+    RCSOFTCHECK(rcl_publish(&speed_2_publisher, &speed_2_msg, NULL));
+     //Reiniciar contador de ticks
+    last_1_ticks = encoder_1_ticks;
+    last_2_ticks = encoder_2_ticks;
+    last_time = current_time;
+  }*/
   //////////////////////////////////////////////
   //Serial.print("Enviando paquetes ...");
   if (state == 0){
+    // Detenemos el Robot
+    DetenerMotor();
+    //delay(3000);// tiempo para actualizar el frame 
+    leer_sensores();
+    if (distancias[2]<=10){
+      EvadirObstaculo();
+      digitalWrite(MOTOR_DIR_PIN_1,HIGH);
+      digitalWrite(MOTOR_DIR_PIN_2,HIGH);
+      ledcWrite(PWM_CHANNEL_0, 100); 
+      ledcWrite(PWM_CHANNEL_1, 100);
+      delay(1000);
+      ledcWrite(PWM_CHANNEL_0, 0); 
+      ledcWrite(PWM_CHANNEL_1, 0);
+      //delay(3000); // tiempo para actualizar el frame 
+    }
     //Coordenada Request
     RCSOFTCHECK(rcl_publish(&coord_request_publisher, &request_coord_msg, NULL))
     state = 1;
@@ -600,7 +682,7 @@ void loop() {
     Serial.println("Solicitud de Coordenada");
   }
   if (state == 1){
-    if (millis() - time_request_coord >= 7000){
+    if (millis() - time_request_coord >= 3000){
       state = 0;
     }
     if (X_coord != 100000 && Y_coord != 100000){
@@ -629,6 +711,8 @@ void loop() {
       }
     }
     Serial.println("Esperando Coordenada");
+    leer_sensores();
+    Serial.println(distancias[2]);
     // Serial.print(angulo_deseado_pid);
     // Serial.print(", ");
     // Serial.print(theta*180/3.14);
@@ -680,7 +764,7 @@ void loop() {
     angulo_anterior = angulo_deseado_pid;
     Serial.println(angulo_giro);
     //delay(3000);
-    h = sqrt(pow(X_coord * 0.22/nw - X_actual_coord*0.22/nw,2) + pow((Y_coord*0.22/nh - Y_actual_coord*0.22/nh),2));
+    h = sqrt(pow(X_coord - X_actual_coord,2) + pow((Y_coord - Y_actual_coord),2));
     state = 3;
     //velocidad_base = 0;
   }
@@ -730,19 +814,13 @@ void loop() {
     //distancias[0] = leer_distancia(TRIG_PIN_1, ECHO_PIN_1);  // Sensor 1
     //distancias[1] = leer_distancia(TRIG_PIN_2, ECHO_PIN_2);  // Sensor 2
     //distancias[2] = leer_distancia(TRIG_PIN_3, ECHO_PIN_3);  // Sensor 3
-    distancias[2] = 30;
-    if (distancias[2] <= 20){
-      ledcWrite(PWM_CHANNEL_0, 0);  // Detener
-      ledcWrite(PWM_CHANNEL_1, 0);  // Detener
-      if(Girar(3.14/2) == true){
-        state = 0; //SOLICITAMOS NUEVA TRAYECTORIA
-        request_coord_msg.data = 1;
-      }
-    }else{
-      request_coord_msg.data = 0;
+    leer_sensores();
+    if (distancias[2]<=10){
+      state =0;
+      request_coord_msg.data = 1;
     }
 
-    if (dist_1 >= h*1.1 && dist_2 >= h*1.1){
+    if (dist_1 >= h && dist_2 >= h){
       ledcWrite(PWM_CHANNEL_0, 0);  // Detener
       ledcWrite(PWM_CHANNEL_1, 0);  // Detener
       theta = 0;
@@ -753,6 +831,10 @@ void loop() {
       h = 0;
       X_actual_coord = X_coord;
       Y_actual_coord = Y_coord;
+      speed_1_msg.data = (int32_t)(X_actual_coord*100);
+      speed_2_msg.data = (int32_t)(Y_actual_coord*100);
+      RCSOFTCHECK(rcl_publish(&speed_1_publisher, &speed_1_msg, NULL));
+      RCSOFTCHECK(rcl_publish(&speed_2_publisher, &speed_2_msg, NULL));
       X_coord = 100000;
       Y_coord = 100000;
       Serial.print(X_actual_coord);

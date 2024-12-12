@@ -14,8 +14,8 @@ class MotorNode(Node):
         super().__init__('motor_node')
         self.client = self.create_client(Trigger, 'analyze_frame')
 
-        while not self.client.wait_for_service(timeout_sec=5.0):
-            self.get_logger().info('Esperando al servicio de análisis de frame...')
+        #while not self.client.wait_for_service(timeout_sec=5.0):
+        #    self.get_logger().info('Esperando al servicio de análisis de frame...')
 
         self.get_logger().info('Conectado con el servidor')
 

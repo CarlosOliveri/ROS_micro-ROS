@@ -22,7 +22,7 @@ float medirDistancia(int trigPin, int echoPin) {
 }
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   pinMode(TRIG_PIN_1, OUTPUT);
   pinMode(ECHO_PIN_1, INPUT);
@@ -50,6 +50,16 @@ void loop() {
   Serial.print("Distancia Sensor 3: ");
   Serial.print(distancia3);
   Serial.println(" cm");
+
+  if(distancia3 <= 10){
+    while(distancia3 <= 10){
+      distancia3 = medirDistancia(TRIG_PIN_3, ECHO_PIN_3);
+      digitalWrite(2,HIGH);
+      delay(500);
+      digitalWrite(2,LOW);
+      delay(500);
+    }
+  }
 
   Serial.println("--------------------------");
   delay(500);  // Pequeño retraso antes de la siguiente lectura

@@ -9,25 +9,26 @@ import math
 import time
 from std_msgs.msg import Int32  # Cambiamos de Float32 a Int32
 from std_msgs.msg import Int32MultiArray
-from .grafo import Grafo, Nodo
+from .grafo import Grafo, Nodo,nw,nh,num_div_x,num_div_y,W,H,lado_robot
 from std_srvs.srv import Trigger  # Servicio de ejemplo que no requiere parámetros
 import json
 import os
 print(f"Directorio de trabajo actual: {os.getcwd()}")
 
 #CONSTANTES DE INTERES
-proporcion_x = 1.16
+""" proporcion_x = 0.76732
 proporcion_y = 0.5
 altura_camara = 3 #metros este parametro hay que verificar al momento de implementar
 W_m = 2 * altura_camara * proporcion_x #metros
 H_m = 2 * altura_camara * proporcion_y #metros
 lado_robot = 0.22 #metros
 W = 1280 #Corresponde a X cm
-H = 720 #Corresponde a Y cm
+H = 720  #Corresponde a Y cm
 num_div_x = int(W_m/lado_robot) # este numero debe ser igual a la proporcion entre la altura del frame y la altura del robot
-num_div_y = int(H_m/lado_robot) # este numero debe ser igual a la proporcion entre la anchura del frame y la anchura del robot
+#num_div_y = int(H_m/lado_robot) # este numero debe ser igual a la proporcion entre la anchura del frame y la anchura del robot
 nw = int(W/num_div_x)
-nh = int(H/num_div_y)
+nh = nw
+num_div_y = int(H/nw) """
 
 #MASCARA PARA DETECCION DE CUERPOS EN MOVIMINETO
 detection = cv2.createBackgroundSubtractorMOG2(history=10000,varThreshold=12)
@@ -42,7 +43,7 @@ upper_yellow = np.array([33, 255, 255],np.uint8)
 blueBajo = np.array([105,150,200],np.uint8)
 blueAlto = np.array([130,255,255],np.uint8)
 #Limite de los obstaculos
-obstBajo = np.array([165,27,150],np.uint8) # obstaculos => rojo
+obstBajo = np.array([165,27,130],np.uint8) # obstaculos => rojo
 obstAlto = np.array([180,255,255],np.uint8)
 
 #Enlace al servidor RTSP de la marca Dahua
@@ -120,14 +121,19 @@ class FrameAnalysisService(Node):
             # Recortar la imagen en los laterales
             frame = frame[:, recorte_izquierda:(ancho - recorte_derecha)]
          """
-            scale_factor = 0.9  # Redimensiona al 50% del tamaño original
+            #scale_factor = 0.9  # 
 
             # Obtener el nuevo tamaño
-            new_width = int(frame.shape[1]* scale_factor)
-            new_height = int(frame.shape[0] * scale_factor)
+            #new_width = int(frame.shape[1]* 0.5)
+            #new_height = int(frame.shape[0] * 0.5)
+            y1= 100
+            y2 = 548
+            x1 = 349
+            x2 = 848
 
             # Redimensionar la imagen
-            frame = cv2.resize(frame, (new_width, new_height))
+            #frame = cv2.resize(frame, (new_width, new_height))
+            frame = frame[y1:y2,x1:x2]
 
             #frame = ajustar_brillo(frame,nivel_rojo,nivel_verde,nivel_azul,nivel_constraste)
             # Procesamiento del frame (similar a tu código original)
@@ -211,7 +217,7 @@ class FrameAnalysisService(Node):
             
             g1 = Grafo(meta_mean_point) # Se crea el grafo de nodos disponibles para transitar
             #Se crean los nodos y se agregan al grafo
-            robot_cero_node = Nodo(robot_coord[0],robot_coord[1])
+            robot_cero_node = Nodo(int(robot_coord[0]+robot_coord[2]/2),int(robot_coord[1] + robot_coord[3]/2))
             meta_node = Nodo(meta_mean_point[0],meta_mean_point[1])
             for k in range(num_div_x):
                 for j in range(num_div_y):
@@ -251,10 +257,12 @@ class FrameAnalysisService(Node):
                     g1.agregar_aristas(k,try_nodo)
  
             near_nodo_robot = g1.buscar_nodo_cercano(robot_coord)
+            self.get_logger().info(f'la coordenada del robot es {robot_coord}')
+            frame = g1.mostrarGrafos(frame)
             if near_nodo_robot == False:
-                print("no se encontro nodo cercano")
+                print("No se encontro al robot en el entorno")
                 response.success = False
-                response.message = json.dumps({"error": "No se encontró trayectoria válida"})
+                response.message = json.dumps({"error": "No se encontro al robot en el entorno"})
                 while True:
                     cv2.imshow("Objetos Encontrados",frame)
                     t = cv2.waitKey(1)
@@ -264,7 +272,6 @@ class FrameAnalysisService(Node):
                 cv2.destroyAllWindows()
                 return response
             else:
-                frame = g1.mostrarGrafos(frame)
                 tray_nodos = g1.menor_trayecto(near_nodo_robot,robot_cero_node,meta_node,frame)
                 if tray_nodos == False:
                     print("no se encontro trayectoria valida")
@@ -283,8 +290,8 @@ class FrameAnalysisService(Node):
                     tray = []
                     for k in tray_nodos:
                         aux = [0,0]
-                        aux[0] = k.clave[0]*lado_robot/nw
-                        aux[1] = k.clave[1]*lado_robot/nh    
+                        aux[0] = float(k.clave[0]*lado_robot/nw)
+                        aux[1] = float(k.clave[1]*lado_robot/nh)  
                         tray.append(aux) 
                     #tray = [(640, 400), (720, 400), (800, 400), (800, 480)]  # Ejemplo real
                     self.get_logger().info("Se genero la trayectoria")
@@ -297,6 +304,7 @@ class FrameAnalysisService(Node):
                     cv2.destroyAllWindows()
                     response.success = True
                     response.message = json.dumps({"tray": tray})
+                    self.get_logger().info(f'({tray[1][0]*nw/lado_robot},{tray[1][0]*nw/lado_robot})')
             """ while True:
                 cv2.imshow("Objetos Encontrados",frame)
                 t = cv2.waitKey(1)
